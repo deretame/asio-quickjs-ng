@@ -1,10 +1,13 @@
+#include "function_registry.hpp"
 #include "host.hpp"
 
 #include <spdlog/spdlog.h>
 
-#include <cstdio>
+#include <cerrno>
+#include <cstring>
 #include <fstream>
 #include <optional>
+#include <random>
 #include <sstream>
 #include <stdexcept>
 #include <utility>
@@ -224,12 +227,28 @@ void set_timeout_fn(Host *host, qjs::Value callback,
 
 } // namespace
 
-Host::Host() = default;
+Host::Host() {
+  std::random_device rd;
+  std::mt19937 rng(rd());
+  uuids::uuid_random_generator gen(rng);
+  host_id = uuids::to_string(gen());
+}
+
+Host::Host(std::string id) : host_id(std::move(id)) {}
 
 Host::~Host() { shutdown(); }
 
 void Host::spdlog_lazy_error(const char *msg) {
   spdlog::error("lazy exception: {}", msg);
+}
+
+void Host::register_function(const std::string &name, SyncFunction fn) {
+  registry.register_function(name, std::move(fn));
+}
+
+void Host::register_async_function(const std::string &name,
+                                   AsyncFunction fn) {
+  registry.register_async_function(name, std::move(fn));
 }
 
 void Host::bind_curl() {
@@ -284,6 +303,10 @@ bool Host::install_runtime() {
     c.fn<&console_warn_fn>("warn");
     c.fn<&console_error_fn>("error");
   });
+  g.set("__hostID", ctx.new_string(host_id));
+  g.set("call",
+        qjs::Value::take(ctx.get(),
+                         JS_NewCFunction(ctx.get(), &native_call, "call", 1)));
   return true;
 }
 
@@ -303,7 +326,7 @@ bool Host::eval_source(std::string_view code, const char *filename,
 bool Host::eval_file(const char *path) {
   std::ifstream in(path, std::ios::binary);
   if (!in) {
-    std::perror(path);
+    spdlog::error("failed to open {}: {}", path, std::strerror(errno));
     return false;
   }
   std::ostringstream ss;

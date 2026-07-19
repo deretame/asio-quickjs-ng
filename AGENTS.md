@@ -17,6 +17,8 @@ Current implemented features:
 - `data:` and `about:` scheme handling in JS.
 - C++20 coroutine channels (`mpsc`, `oneshot`) in `src/channel.hpp`.
 - WPT-style fetch test runner for official Web Platform Tests.
+- Dynamic function registry: register C++ functions from C++ and call them from JS via `call(name, ...args)`. Supports both sync (`Host::register_function`) and async (`Host::register_async_function`) handlers (`src/function_registry.hpp/.cpp`).
+- A unique ID per `Host` instance, defaulting to UUID v4; optionally supplied via `Host(std::string id)`. Exposed to JS as `globalThis.__hostID`.
 
 Planned (not yet implemented):
 
@@ -37,6 +39,7 @@ Planned (not yet implemented):
 | JSON | nlohmann/json 3.12.0 | Dynamic JSON DOM. |
 | Reflection | reflect-cpp 0.25.0 | Struct ↔ JSON via reflection (bundles yyjson). |
 | Testing | Google Test 1.17.0 | C++ unit tests. |
+| ID generation | stduuid 1.2.3 | Header-only UUID v4 used as the default per-instance Host ID. |
 | JS fixtures | Node.js | WPT network test server (`tests/wpt/node_test_server.mjs`). |
 
 ## Directory layout
@@ -50,6 +53,7 @@ asio-quickjs-ng/
 ├── src/
 │   ├── host.hpp/.cpp       # Runtime: io_context, QuickJS, curl multi driver, event loop
 │   ├── fetch.hpp/.cpp      # __nativeFetch, async_fetch, embedded JS bootstrap
+│   ├── function_registry.hpp/.cpp # Dynamic call(name, ...args) registry
 │   ├── curl_http.hpp       # libcurl Global/Easy/Multi/Transfer wrappers
 │   ├── asio_executor.hpp   # async_simple Executor → asio
 │   ├── channel.hpp         # C++20 coroutine mpsc/oneshot channels
@@ -68,7 +72,9 @@ asio-quickjs-ng/
 │   ├── test_channel.cpp
 │   ├── test_two_qjs.cpp
 │   ├── test_fetch.cpp
+│   ├── test_function_registry.cpp
 │   ├── test_json.cpp
+│   ├── test_host_id.cpp
 │   ├── test_wpt_fetch.cpp
 │   ├── http_test_server.hpp
 │   └── wpt/                # WPT runner support
@@ -120,6 +126,7 @@ cmake --build build -j
 | `test_two_qjs` | `build/test_two_qjs.exe` | Two-VM interop test. |
 | `test_fetch` | `build/test_fetch.exe` | Local fetch smoke tests. |
 | `test_json` | `build/test_json.exe` | JSON library sanity tests. |
+| `test_host_id` | `build/test_host_id.exe` | Per-instance Host ID tests. |
 | `test_wpt_fetch` | `build/test_wpt_fetch.exe` | Official WPT fetch runner. |
 
 ### Run the demo
@@ -152,6 +159,7 @@ Or run executables directly:
 .\build\test_two_qjs.exe
 .\build\test_json.exe
 .\build\test_fetch.exe
+.\build\test_host_id.exe
 ```
 
 ### Run WPT fetch tests
@@ -243,7 +251,7 @@ If you edit a `.js` file, you must rebuild for the `#embed` to pick up the new b
 ## Testing instructions
 
 1. Build with `cmake --build build -j`.
-2. Run `test_channel`, `test_two_qjs`, `test_json`, `test_fetch` from the build directory.
+2. Run `test_channel`, `test_two_qjs`, `test_json`, `test_fetch`, `test_host_id` from the build directory.
 3. For WPT tests, ensure `third_party/wpt/resources/testharness.js` exists (sparse checkout) and run `test_wpt_fetch.exe`.
 4. New fetch behavior should be covered by both:
    - a local C++ smoke test in `tests/test_fetch.cpp` if it involves real network I/O, and

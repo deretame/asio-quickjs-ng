@@ -6,6 +6,8 @@
 
 #include <gtest/gtest.h>
 
+#include <spdlog/spdlog.h>
+
 #include <chrono>
 #include <cstdio>
 #include <filesystem>
@@ -603,9 +605,9 @@ TEST_F(WptFetch, OfficialManifest) {
   RecordProperty("wpt_pass", std::to_string(total_pass));
   RecordProperty("wpt_fail", std::to_string(total_fail));
   RecordProperty("wpt_skip", std::to_string(total_skip));
-  std::printf("fixture %s\n%s\nTOTAL pass=%d fail=%d skip=%d\n",
-              node_.origin().c_str(), summary.str().c_str(), total_pass,
-              total_fail, total_skip);
+  spdlog::info("fixture {}\n{}\nTOTAL pass={} fail={} skip={}",
+               node_.origin(), summary.str(), total_pass, total_fail,
+               total_skip);
   EXPECT_GT(total_pass, 0);
   EXPECT_EQ(total_fail, 0);
 }

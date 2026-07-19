@@ -99,7 +99,15 @@ FetchContent_Declare(
   GIT_SHALLOW TRUE
 )
 
-FetchContent_MakeAvailable(spdlog quickjs curl nlohmann_json reflectcpp)
+# --- stduuid (header-only UUID library) ---
+FetchContent_Declare(
+  stduuid
+  GIT_REPOSITORY https://github.com/mariusbancila/stduuid.git
+  GIT_TAG v1.2.3
+  GIT_SHALLOW TRUE
+)
+
+FetchContent_MakeAvailable(spdlog quickjs curl nlohmann_json reflectcpp stduuid)
 
 FetchContent_GetProperties(asio)
 if(NOT asio_POPULATED)
@@ -124,6 +132,7 @@ target_compile_definitions(async_simple_headers INTERFACE ASYNC_SIMPLE_HAS_NOT_A
 add_library(asio_qjs_core
   src/host.cpp
   src/fetch.cpp
+  src/function_registry.cpp
 )
 target_include_directories(asio_qjs_core PUBLIC "${CMAKE_SOURCE_DIR}/src")
 target_compile_definitions(asio_qjs_core PUBLIC
@@ -138,6 +147,7 @@ target_link_libraries(asio_qjs_core PUBLIC
   async_simple_headers
   nlohmann_json::nlohmann_json
   reflectcpp::reflectcpp
+  stduuid
 )
 if(WIN32)
   target_link_libraries(asio_qjs_core PUBLIC
@@ -195,10 +205,12 @@ if(ASIO_QJS_BUILD_TESTS)
     )
   endfunction()
 
+  add_qjs_gtest(test_function_registry tests/test_function_registry.cpp)
   add_qjs_gtest(test_channel tests/test_channel.cpp)
   add_qjs_gtest(test_two_qjs tests/test_two_qjs.cpp)
   add_qjs_gtest(test_fetch tests/test_fetch.cpp)
   add_qjs_gtest(test_json tests/test_json.cpp)
+  add_qjs_gtest(test_host_id tests/test_host_id.cpp)
 
   add_executable(test_wpt_fetch tests/test_wpt_fetch.cpp)
   target_link_libraries(test_wpt_fetch PRIVATE GTest::gtest_main asio_qjs_core)

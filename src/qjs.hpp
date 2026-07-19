@@ -1,7 +1,8 @@
 #pragma once
 
+#include <spdlog/spdlog.h>
+
 #include <concepts>
-#include <cstdio>
 #include <optional>
 #include <stdexcept>
 #include <string>
@@ -206,7 +207,7 @@ inline Value Ctx::exception() const {
 inline void Ctx::dump_exception() const {
   Value exc = exception();
   auto s = exc.to_std_string();
-  std::fprintf(stderr, "JS exception: %s\n", s ? s->c_str() : "<unknown>");
+  spdlog::error("JS exception: {}", s ? s->c_str() : "<unknown>");
 }
 inline void Ctx::throw_type_error(const char *msg) const {
   JS_ThrowTypeError(ctx_, "%s", msg);

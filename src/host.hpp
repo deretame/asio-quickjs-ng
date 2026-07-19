@@ -2,7 +2,10 @@
 
 #include "asio_executor.hpp"
 #include "curl_http.hpp"
+#include "function_registry.hpp"
 #include "qjs.hpp"
+
+#include <uuid.h>
 
 #include <async_simple/Promise.h>
 #include <async_simple/coro/FutureAwaiter.h>
@@ -12,7 +15,6 @@
 #include <chrono>
 #include <cstdint>
 #include <exception>
-#include <map>
 #include <memory>
 #include <optional>
 #include <string>
@@ -33,7 +35,7 @@ struct Host {
   qjs::Context ctx{rt};
   curl_http::Multi multi;
   asio::steady_timer multi_timer{ioc};
-  std::map<curl_socket_t, std::shared_ptr<CurlWatch>> watches;
+  std::unordered_map<curl_socket_t, std::shared_ptr<CurlWatch>> watches;
   int pending_ops = 0;
   bool stopping = false;
 
@@ -41,7 +43,14 @@ struct Host {
   uint64_t next_fetch_id = 1;
   std::unordered_map<uint64_t, curl_http::Transfer *> fetch_transfers;
 
+  // Dynamic function registry: call(name, ...args) from JS.
+  FunctionRegistry registry;
+
+  // Per-instance ID. Default is a UUID v4 generated at construction.
+  std::string host_id;
+
   Host();
+  explicit Host(std::string id);
   ~Host();
 
   Host(const Host &) = delete;
@@ -58,10 +67,27 @@ struct Host {
   qjs::Value global() { return ctx.global(); }
   qjs::Ctx js() { return ctx.ref(); }
   JSContext *js_raw() { return ctx.get(); }
+  const std::string &id() const { return host_id; }
 
   template <auto Fn>
   qjs::Value func(const char *name) {
     return ctx.func<Fn>(name);
+  }
+
+  void register_function(const std::string &name, SyncFunction fn);
+  void register_async_function(const std::string &name, AsyncFunction fn);
+
+  // Trampoline-style overloads: auto-convert JS args / return values.
+  template <typename Fn>
+    requires(!std::same_as<std::decay_t<Fn>, SyncFunction>)
+  void register_function(const std::string &name, Fn &&fn) {
+    registry.register_function(name, std::forward<Fn>(fn));
+  }
+
+  template <typename Fn>
+    requires(!std::same_as<std::decay_t<Fn>, AsyncFunction>)
+  void register_async_function(const std::string &name, Fn &&fn) {
+    registry.register_async_function(name, std::forward<Fn>(fn));
   }
 
   [[noreturn]] void throw_type_error(const char *msg);
