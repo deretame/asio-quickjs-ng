@@ -196,6 +196,9 @@ if(ASIO_QJS_BUILD_TESTS)
   function(add_qjs_gtest name)
     add_executable(${name} ${ARGN})
     target_link_libraries(${name} PRIVATE GTest::gtest_main asio_qjs_core)
+    target_compile_definitions(${name} PRIVATE
+      "ASIO_QJS_SOURCE_DIR=\"${CMAKE_SOURCE_DIR}\""
+    )
     if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
       target_compile_options(${name} PRIVATE -Wall -Wextra -fcoroutines -O2
         -Wno-maybe-uninitialized)

@@ -16,16 +16,8 @@
 #include "curl_http.hpp"
 #include "fetch.hpp"
 #include "host.hpp"
+#include "node_fixture.hpp"
 #include "qjs.hpp"
-
-#ifdef _WIN32
-#include <windows.h>
-#else
-#include <signal.h>
-#include <sys/types.h>
-#include <sys/wait.h>
-#include <unistd.h>
-#endif
 
 namespace fs = std::filesystem;
 
@@ -154,217 +146,6 @@ bool eval_path(Host& host, const fs::path& p, bool drain = true) {
   }
   return host.eval_source(code, p.generic_string().c_str(), drain);
 }
-
-// --- Node fixture server ---
-class NodeFixtureServer {
- public:
-  bool start(const fs::path& repo) {
-    script_ = repo / "tests" / "wpt" / "node_test_server.mjs";
-    if (!fs::exists(script_)) {
-      return false;
-    }
-#ifdef _WIN32
-    SECURITY_ATTRIBUTES sa{};
-    sa.nLength = sizeof(sa);
-    sa.bInheritHandle = TRUE;
-    HANDLE rd = nullptr, wr = nullptr;
-    if (!CreatePipe(&rd, &wr, &sa, 0)) {
-      return false;
-    }
-    SetHandleInformation(rd, HANDLE_FLAG_INHERIT, 0);
-
-    HANDLE in_rd = nullptr, in_wr = nullptr;
-    if (!CreatePipe(&in_rd, &in_wr, &sa, 0)) {
-      CloseHandle(rd);
-      CloseHandle(wr);
-      return false;
-    }
-    SetHandleInformation(in_wr, HANDLE_FLAG_INHERIT, 0);
-
-    STARTUPINFOW si{};
-    si.cb = sizeof(si);
-    si.dwFlags = STARTF_USESTDHANDLES;
-    si.hStdOutput = wr;
-    si.hStdError = wr;
-    si.hStdInput = in_rd;
-
-    std::wstring cmd = L"node \"" + script_.wstring() + L"\"";
-    std::vector<wchar_t> buf(cmd.begin(), cmd.end());
-    buf.push_back(0);
-
-    PROCESS_INFORMATION pi{};
-    BOOL ok = CreateProcessW(nullptr, buf.data(), nullptr, nullptr, TRUE, 0,
-                             nullptr, repo.wstring().c_str(), &si, &pi);
-    CloseHandle(wr);
-    CloseHandle(in_rd);
-    if (!ok) {
-      CloseHandle(rd);
-      CloseHandle(in_wr);
-      return false;
-    }
-    CloseHandle(pi.hThread);
-    proc_ = pi.hProcess;
-    out_rd_ = rd;
-    in_wr_ = in_wr;
-
-    // Read READY line
-    std::string line;
-    char ch;
-    DWORD n = 0;
-    auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
-    while (std::chrono::steady_clock::now() < deadline) {
-      DWORD avail = 0;
-      if (!PeekNamedPipe(out_rd_, nullptr, 0, nullptr, &avail, nullptr)) {
-        break;
-      }
-      if (avail == 0) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
-        continue;
-      }
-      if (!ReadFile(out_rd_, &ch, 1, &n, nullptr) || n != 1) {
-        break;
-      }
-      if (ch == '\n') {
-        break;
-      }
-      if (ch != '\r') {
-        line.push_back(ch);
-      }
-    }
-    if (line.rfind("READY ", 0) != 0) {
-      stop();
-      return false;
-    }
-    origin_ = line.substr(6);
-    while (!origin_.empty() &&
-           (origin_.back() == ' ' || origin_.back() == '\r')) {
-      origin_.pop_back();
-    }
-    return !origin_.empty();
-#else
-    int out_pipe[2];
-    int in_pipe[2];
-    if (pipe(out_pipe) != 0 || pipe(in_pipe) != 0) {
-      return false;
-    }
-    pid_t pid = fork();
-    if (pid < 0) {
-      return false;
-    }
-    if (pid == 0) {
-      dup2(out_pipe[1], STDOUT_FILENO);
-      dup2(out_pipe[1], STDERR_FILENO);
-      dup2(in_pipe[0], STDIN_FILENO);
-      close(out_pipe[0]);
-      close(out_pipe[1]);
-      close(in_pipe[0]);
-      close(in_pipe[1]);
-      auto script = script_.string();
-      execlp("node", "node", script.c_str(), static_cast<char*>(nullptr));
-      _exit(127);
-    }
-    close(out_pipe[1]);
-    close(in_pipe[0]);
-    pid_ = pid;
-    out_fd_ = out_pipe[0];
-    in_fd_ = in_pipe[1];
-
-    std::string line;
-    char ch;
-    auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
-    while (std::chrono::steady_clock::now() < deadline) {
-      fd_set rfds;
-      FD_ZERO(&rfds);
-      FD_SET(out_fd_, &rfds);
-      timeval tv{0, 50000};
-      int r = select(out_fd_ + 1, &rfds, nullptr, nullptr, &tv);
-      if (r <= 0) {
-        continue;
-      }
-      if (read(out_fd_, &ch, 1) != 1) {
-        break;
-      }
-      if (ch == '\n') {
-        break;
-      }
-      if (ch != '\r') {
-        line.push_back(ch);
-      }
-    }
-    if (line.rfind("READY ", 0) != 0) {
-      stop();
-      return false;
-    }
-    origin_ = line.substr(6);
-    return !origin_.empty();
-#endif
-  }
-
-  void stop() {
-#ifdef _WIN32
-    if (in_wr_) {
-      DWORD w = 0;
-      const char* q = "quit\n";
-      WriteFile(in_wr_, q, 5, &w, nullptr);
-      CloseHandle(in_wr_);
-      in_wr_ = nullptr;
-    }
-    if (proc_) {
-      if (WaitForSingleObject(proc_, 2000) != WAIT_OBJECT_0) {
-        TerminateProcess(proc_, 1);
-      }
-      CloseHandle(proc_);
-      proc_ = nullptr;
-    }
-    if (out_rd_) {
-      CloseHandle(out_rd_);
-      out_rd_ = nullptr;
-    }
-#else
-    if (in_fd_ >= 0) {
-      const char* q = "quit\n";
-      (void)write(in_fd_, q, 5);
-      close(in_fd_);
-      in_fd_ = -1;
-    }
-    if (pid_ > 0) {
-      int status = 0;
-      for (int i = 0; i < 20; ++i) {
-        if (waitpid(pid_, &status, WNOHANG) == pid_) {
-          pid_ = -1;
-          break;
-        }
-        std::this_thread::sleep_for(std::chrono::milliseconds(50));
-      }
-      if (pid_ > 0) {
-        kill(pid_, SIGKILL);
-        waitpid(pid_, &status, 0);
-        pid_ = -1;
-      }
-    }
-    if (out_fd_ >= 0) {
-      close(out_fd_);
-      out_fd_ = -1;
-    }
-#endif
-    origin_.clear();
-  }
-
-  const std::string& origin() const { return origin_; }
-
- private:
-  fs::path script_;
-  std::string origin_;
-#ifdef _WIN32
-  HANDLE proc_ = nullptr;
-  HANDLE out_rd_ = nullptr;
-  HANDLE in_wr_ = nullptr;
-#else
-  pid_t pid_ = -1;
-  int out_fd_ = -1;
-  int in_fd_ = -1;
-#endif
-};
 
 struct FileResult {
   std::string path;
@@ -545,7 +326,8 @@ class WptFetch : public ::testing::Test {
     ASSERT_FALSE(wpt_.empty())
         << "third_party/wpt not found; clone WPT sparse checkout";
     repo_ = repo_root_from_wpt(wpt_);
-    ASSERT_TRUE(node_.start(repo_))
+    auto script = repo_ / "tests" / "wpt" / "node_test_server.mjs";
+    ASSERT_TRUE(node_.start(script, repo_))
         << "failed to start node test server (is node on PATH?)";
   }
 

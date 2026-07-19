@@ -73,13 +73,13 @@ asio-quickjs-ng/
 ├── tests/
 │   ├── test_channel.cpp
 │   ├── test_two_qjs.cpp
-│   ├── test_fetch.cpp
+│   ├── test_fetch.cpp       # Local fetch smoke tests (uses Node.js fixture server)
 │   ├── test_function_registry.cpp
 │   ├── test_json.cpp
 │   ├── test_host_id.cpp
 │   ├── test_wpt_fetch.cpp
-│   ├── http_test_server.hpp
-│   └── wpt/                # WPT runner support
+│   ├── node_fixture.hpp     # Shared helper to launch the Node.js test server
+│   └── wpt/                 # WPT runner support
 │       ├── manifest.txt
 │       ├── shell_bootstrap.js
 │       ├── testharnessreport.js

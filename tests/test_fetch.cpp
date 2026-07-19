@@ -1,16 +1,19 @@
-// Non-WPT fetch smoke tests (local HTTP server + C++ API).
+// Non-WPT fetch smoke tests (network fixtures via Node.js server).
 #include <gtest/gtest.h>
 
 #include <cstdio>
+#include <filesystem>
 #include <string>
 
 #include "curl_http.hpp"
 #include "fetch.hpp"
 #include "host.hpp"
-#include "http_test_server.hpp"
+#include "node_fixture.hpp"
 #include "qjs.hpp"
 
 namespace {
+
+namespace fs = std::filesystem;
 
 bool setup_host(Host& host) {
   return host && host.install_runtime() && fetch_api::install(host);
@@ -67,7 +70,9 @@ std::string quote_js(const std::string& s) {
 class FetchLocal : public ::testing::Test {
  protected:
   void SetUp() override {
-    server_.start();
+    auto script = fs::path(ASIO_QJS_SOURCE_DIR) / "tests" / "wpt" /
+                  "node_test_server.mjs";
+    server_.start(script);
     ASSERT_TRUE(setup_host(host_));
     origin_ = server_.origin();
     ASSERT_TRUE(host_.eval_source(
@@ -78,7 +83,7 @@ class FetchLocal : public ::testing::Test {
     server_.stop();
   }
 
-  HttpTestServer server_;
+  NodeFixtureServer server_;
   Host host_;
   std::string origin_;
 };
@@ -159,8 +164,9 @@ TEST_F(FetchLocal, DataAndAboutSchemes) {
 }
 
 TEST(FetchCpp, AsyncOptionsPost) {
-  HttpTestServer server;
-  server.start();
+  NodeFixtureServer server;
+  server.start(fs::path(ASIO_QJS_SOURCE_DIR) / "tests" / "wpt" /
+               "node_test_server.mjs");
   Host host;
   ASSERT_TRUE(setup_host(host));
   curl_http::FetchOptions opt;
