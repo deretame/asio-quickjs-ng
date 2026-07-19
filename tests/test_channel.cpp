@@ -1,5 +1,3 @@
-#include "channel.hpp"
-
 #include <async_simple/coro/Lazy.h>
 #include <async_simple/coro/SyncAwait.h>
 #include <gtest/gtest.h>
@@ -7,6 +5,8 @@
 #include <optional>
 #include <string>
 #include <vector>
+
+#include "channel.hpp"
 
 namespace {
 
@@ -39,7 +39,7 @@ TEST(Mpsc, SuspendUntilSend) {
       co_return;
     };
 
-    receiver().start([&](auto &&) {});
+    receiver().start([&](auto&&) {});
     EXPECT_FALSE(receiver_done);
     EXPECT_TRUE(tx.send(99));
     EXPECT_TRUE(receiver_done);
@@ -76,7 +76,7 @@ TEST(Mpsc, CloseWakesReceiver) {
       done = true;
       co_return;
     };
-    receiver().start([&](auto &&) {});
+    receiver().start([&](auto&&) {});
     EXPECT_FALSE(done);
     tx.close();
     EXPECT_TRUE(done);
@@ -95,7 +95,7 @@ TEST(Mpsc, LastSenderDropCloses) {
       done = true;
       co_return;
     };
-    receiver().start([&](auto &&) {});
+    receiver().start([&](auto&&) {});
     EXPECT_FALSE(done);
     {
       auto drop = std::move(tx);
@@ -157,7 +157,7 @@ TEST(Oneshot, SuspendUntilSend) {
       done = true;
       co_return;
     };
-    receiver().start([&](auto &&) {});
+    receiver().start([&](auto&&) {});
     EXPECT_FALSE(done);
     EXPECT_TRUE(tx.send(std::string("ok")));
     EXPECT_TRUE(done);
@@ -177,7 +177,7 @@ TEST(Oneshot, DropSender) {
       done = true;
       co_return;
     };
-    receiver().start([&](auto &&) {});
+    receiver().start([&](auto&&) {});
     EXPECT_FALSE(done);
     {
       auto drop = std::move(tx);
@@ -188,4 +188,4 @@ TEST(Oneshot, DropSender) {
   }());
 }
 
-} // namespace
+}  // namespace

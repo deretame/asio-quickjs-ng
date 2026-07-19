@@ -1,22 +1,22 @@
 // Non-WPT fetch smoke tests (local HTTP server + C++ API).
+#include <gtest/gtest.h>
+
+#include <cstdio>
+#include <string>
+
 #include "curl_http.hpp"
 #include "fetch.hpp"
 #include "host.hpp"
 #include "http_test_server.hpp"
 #include "qjs.hpp"
 
-#include <gtest/gtest.h>
-
-#include <cstdio>
-#include <string>
-
 namespace {
 
-bool setup_host(Host &host) {
+bool setup_host(Host& host) {
   return host && host.install_runtime() && fetch_api::install(host);
 }
 
-bool js_truthy(Host &host, qjs::Value v) {
+bool js_truthy(Host& host, qjs::Value v) {
   return JS_ToBool(host.js_raw(), v.raw()) != 0;
 }
 
@@ -25,7 +25,7 @@ std::string js_str(qjs::Value v) {
   return s.value_or("");
 }
 
-void run_js_async(Host &host, const std::string &body) {
+void run_js_async(Host& host, const std::string& body) {
   std::string code = R"JS(
     globalThis.__done = false;
     globalThis.__err = "";
@@ -48,7 +48,7 @@ void run_js_async(Host &host, const std::string &body) {
   EXPECT_EQ(js_str(host.global().get("__err")), "");
 }
 
-std::string quote_js(const std::string &s) {
+std::string quote_js(const std::string& s) {
   std::string out = "\"";
   for (unsigned char c : s) {
     if (c == '\\' || c == '"') {
@@ -62,10 +62,10 @@ std::string quote_js(const std::string &s) {
   return out;
 }
 
-} // namespace
+}  // namespace
 
 class FetchLocal : public ::testing::Test {
-protected:
+ protected:
   void SetUp() override {
     server_.start();
     ASSERT_TRUE(setup_host(host_));

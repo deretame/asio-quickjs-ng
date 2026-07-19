@@ -24,14 +24,14 @@ class Ctx;
 // Non-owning context view (for native callbacks)
 // ---------------------------------------------------------------------------
 class Ctx {
-public:
-  explicit Ctx(JSContext *ctx) : ctx_(ctx) {}
+ public:
+  explicit Ctx(JSContext* ctx) : ctx_(ctx) {}
 
-  JSContext *get() const { return ctx_; }
+  JSContext* get() const { return ctx_; }
 
   template <typename T>
-  T *opaque() const {
-    return static_cast<T *>(JS_GetContextOpaque(ctx_));
+  T* opaque() const {
+    return static_cast<T*>(JS_GetContextOpaque(ctx_));
   }
 
   Value object() const;
@@ -43,46 +43,46 @@ public:
 
   void dump_exception() const;
 
-  [[noreturn]] void throw_type_error(const char *msg) const;
-  [[noreturn]] void throw_internal_error(const char *msg) const;
+  [[noreturn]] void throw_type_error(const char* msg) const;
+  [[noreturn]] void throw_internal_error(const char* msg) const;
 
   template <auto Fn>
-  Value func(const char *name) const;
+  Value func(const char* name) const;
 
-private:
-  JSContext *ctx_ = nullptr;
+ private:
+  JSContext* ctx_ = nullptr;
 };
 
 // ---------------------------------------------------------------------------
 // Value (RAII)
 // ---------------------------------------------------------------------------
 class Value {
-public:
+ public:
   Value() = default;
-  Value(JSContext *ctx, JSValue v) : ctx_(ctx), v_(v) {}
+  Value(JSContext* ctx, JSValue v) : ctx_(ctx), v_(v) {}
   ~Value() { reset(); }
 
-  Value(const Value &o)
+  Value(const Value& o)
       : ctx_(o.ctx_), v_(o.ctx_ ? JS_DupValue(o.ctx_, o.v_) : o.v_) {}
 
-  Value(Value &&o) noexcept : ctx_(o.ctx_), v_(o.v_) {
+  Value(Value&& o) noexcept : ctx_(o.ctx_), v_(o.v_) {
     o.ctx_ = nullptr;
     o.v_ = JS_UNDEFINED;
   }
 
-  Value &operator=(Value o) noexcept {
+  Value& operator=(Value o) noexcept {
     swap(o);
     return *this;
   }
 
-  void swap(Value &o) noexcept {
+  void swap(Value& o) noexcept {
     std::swap(ctx_, o.ctx_);
     std::swap(v_, o.v_);
   }
 
   explicit operator bool() const { return ctx_ != nullptr; }
 
-  JSContext *ctx() const { return ctx_; }
+  JSContext* ctx() const { return ctx_; }
   JSValue raw() const { return v_; }
   JSValueConst cref() const { return v_; }
 
@@ -106,31 +106,31 @@ public:
   bool is_undefined() const { return JS_IsUndefined(v_); }
 
   static Value undefined() { return {}; }
-  static Value dup(JSContext *ctx, JSValueConst v) {
+  static Value dup(JSContext* ctx, JSValueConst v) {
     return Value(ctx, JS_DupValue(ctx, v));
   }
-  static Value take(JSContext *ctx, JSValue v) { return Value(ctx, v); }
+  static Value take(JSContext* ctx, JSValue v) { return Value(ctx, v); }
 
   // Low-level.
-  Value call_raw(JSValueConst this_val, int argc, JSValueConst *argv) const {
+  Value call_raw(JSValueConst this_val, int argc, JSValueConst* argv) const {
     return take(ctx_, JS_Call(ctx_, v_, this_val, argc, argv));
   }
 
   // fn(), fn(a), fn(a, b, ...) — argc 由参数包推导；this = undefined
   template <typename... Args>
-  Value call(const Args &...args) const {
+  Value call(const Args&... args) const {
     return call_on_raw(JS_UNDEFINED, args...);
   }
 
   // method.call_on(obj, a, b)  — this = obj
   template <typename... Args>
-  Value call_on(const Value &this_val, const Args &...args) const {
+  Value call_on(const Value& this_val, const Args&... args) const {
     return call_on_raw(this_val.cref(), args...);
   }
 
-private:
+ private:
   template <typename... Args>
-  Value call_on_raw(JSValueConst this_val, const Args &...args) const {
+  Value call_on_raw(JSValueConst this_val, const Args&... args) const {
     static_assert((std::same_as<Args, Value> && ...),
                   "Value::call args must be qjs::Value");
     constexpr int n = static_cast<int>(sizeof...(Args));
@@ -142,13 +142,12 @@ private:
     }
   }
 
-public:
-
+ public:
   std::optional<std::string> to_std_string() const {
     if (!ctx_) {
       return std::nullopt;
     }
-    const char *s = JS_ToCString(ctx_, v_);
+    const char* s = JS_ToCString(ctx_, v_);
     if (!s) {
       return std::nullopt;
     }
@@ -157,32 +156,32 @@ public:
     return out;
   }
 
-  bool to_int32(int32_t &out) const {
+  bool to_int32(int32_t& out) const {
     return ctx_ && JS_ToInt32(ctx_, &out, v_) == 0;
   }
 
-  void set(const char *name, Value value) {
+  void set(const char* name, Value value) {
     JS_SetPropertyStr(ctx_, v_, name, value.release());
   }
 
   // g.fn<&native_fn>("name") — name once (creates + sets C function).
   template <auto Fn>
-  void fn(const char *name);
+  void fn(const char* name);
 
   // g.obj("console", [](Value &o) { o.fn<&print_fn>("log"); });
   template <typename F>
-  void obj(const char *name, F &&setup) {
+  void obj(const char* name, F&& setup) {
     Value child = take(ctx_, JS_NewObject(ctx_));
-    static_cast<F &&>(setup)(child);
+    static_cast<F&&>(setup)(child);
     set(name, std::move(child));
   }
 
-  Value get(const char *name) const {
+  Value get(const char* name) const {
     return take(ctx_, JS_GetPropertyStr(ctx_, v_, name));
   }
 
-private:
-  JSContext *ctx_ = nullptr;
+ private:
+  JSContext* ctx_ = nullptr;
   JSValue v_ = JS_UNDEFINED;
 };
 
@@ -198,9 +197,7 @@ inline Value Ctx::new_int32(int32_t v) const {
 inline Value Ctx::new_string(std::string_view s) const {
   return Value::take(ctx_, JS_NewStringLen(ctx_, s.data(), s.size()));
 }
-inline Value Ctx::undefined() const {
-  return Value::take(ctx_, JS_UNDEFINED);
-}
+inline Value Ctx::undefined() const { return Value::take(ctx_, JS_UNDEFINED); }
 inline Value Ctx::exception() const {
   return Value::take(ctx_, JS_GetException(ctx_));
 }
@@ -209,11 +206,11 @@ inline void Ctx::dump_exception() const {
   auto s = exc.to_std_string();
   spdlog::error("JS exception: {}", s ? s->c_str() : "<unknown>");
 }
-inline void Ctx::throw_type_error(const char *msg) const {
+inline void Ctx::throw_type_error(const char* msg) const {
   JS_ThrowTypeError(ctx_, "%s", msg);
   throw std::runtime_error(msg);
 }
-inline void Ctx::throw_internal_error(const char *msg) const {
+inline void Ctx::throw_internal_error(const char* msg) const {
   JS_ThrowInternalError(ctx_, "%s", msg);
   throw std::runtime_error(msg);
 }
@@ -226,9 +223,9 @@ struct This {
 };
 
 struct Args {
-  JSContext *ctx = nullptr;
+  JSContext* ctx = nullptr;
   int argc = 0;
-  JSValueConst *argv = nullptr;
+  JSValueConst* argv = nullptr;
 
   int size() const { return argc; }
   Value operator[](int i) const { return Value::dup(ctx, argv[i]); }
@@ -246,9 +243,8 @@ struct is_optional<std::optional<T>> : std::true_type {};
 // ---- concepts: 只允许我们实现了转换的类型 ----
 
 template <typename T>
-concept JsValueType =
-    std::same_as<T, Value> || std::same_as<T, std::string> ||
-    std::same_as<T, int32_t> || std::same_as<T, bool>;
+concept JsValueType = std::same_as<T, Value> || std::same_as<T, std::string> ||
+                      std::same_as<T, int32_t> || std::same_as<T, bool>;
 
 // 从 JS_GetContextOpaque 注入的应用对象指针，例如 Host*
 template <typename T>
@@ -269,26 +265,26 @@ template <typename T>
 concept JsReturnType =
     std::is_void_v<T> || std::same_as<T, Value> || std::same_as<T, JSValue> ||
     std::same_as<T, std::string> || std::same_as<T, std::string_view> ||
-    std::same_as<T, const char *> || std::same_as<T, int32_t> ||
+    std::same_as<T, const char*> || std::same_as<T, int32_t> ||
     std::same_as<T, bool>;
 
 template <typename T>
-concept FreeFunctionPtr = std::is_pointer_v<T> &&
-                          std::is_function_v<std::remove_pointer_t<T>>;
+concept FreeFunctionPtr =
+    std::is_pointer_v<T> && std::is_function_v<std::remove_pointer_t<T>>;
 
 // ---- from_js / to_js ----
 
 template <JsValueType T>
-T from_js(JSContext *ctx, JSValueConst v);
+T from_js(JSContext* ctx, JSValueConst v);
 
 template <>
-inline Value from_js<Value>(JSContext *ctx, JSValueConst v) {
+inline Value from_js<Value>(JSContext* ctx, JSValueConst v) {
   return Value::dup(ctx, v);
 }
 
 template <>
-inline std::string from_js<std::string>(JSContext *ctx, JSValueConst v) {
-  const char *s = JS_ToCString(ctx, v);
+inline std::string from_js<std::string>(JSContext* ctx, JSValueConst v) {
+  const char* s = JS_ToCString(ctx, v);
   if (!s) {
     throw ConvertError{};
   }
@@ -298,7 +294,7 @@ inline std::string from_js<std::string>(JSContext *ctx, JSValueConst v) {
 }
 
 template <>
-inline int32_t from_js<int32_t>(JSContext *ctx, JSValueConst v) {
+inline int32_t from_js<int32_t>(JSContext* ctx, JSValueConst v) {
   int32_t out = 0;
   if (JS_ToInt32(ctx, &out, v)) {
     throw ConvertError{};
@@ -307,12 +303,12 @@ inline int32_t from_js<int32_t>(JSContext *ctx, JSValueConst v) {
 }
 
 template <>
-inline bool from_js<bool>(JSContext *ctx, JSValueConst v) {
+inline bool from_js<bool>(JSContext* ctx, JSValueConst v) {
   return JS_ToBool(ctx, v);
 }
 
 template <JsValueType T>
-std::optional<T> from_js_optional(JSContext *ctx, JSValueConst v) {
+std::optional<T> from_js_optional(JSContext* ctx, JSValueConst v) {
   if (JS_IsUndefined(v) || JS_IsNull(v)) {
     return std::nullopt;
   }
@@ -320,8 +316,8 @@ std::optional<T> from_js_optional(JSContext *ctx, JSValueConst v) {
 }
 
 template <JsArgType T>
-T pull_arg(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv,
-           int &index) {
+T pull_arg(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv,
+           int& index) {
   if constexpr (std::same_as<T, Ctx>) {
     return Ctx{ctx};
   } else if constexpr (std::same_as<T, This>) {
@@ -332,7 +328,7 @@ T pull_arg(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv,
     return a;
   } else if constexpr (OpaquePtr<T>) {
     // 不消耗 JS 参数；从 context opaque 注入（注册前 JS_SetContextOpaque）
-    auto *p = static_cast<T>(JS_GetContextOpaque(ctx));
+    auto* p = static_cast<T>(JS_GetContextOpaque(ctx));
     if (!p) {
       JS_ThrowInternalError(ctx, "context opaque is null");
       throw ConvertError{};
@@ -354,7 +350,7 @@ T pull_arg(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv,
 }
 
 template <JsReturnType R>
-JSValue to_js(JSContext *ctx, R &&r) {
+JSValue to_js(JSContext* ctx, R&& r) {
   using T = std::decay_t<R>;
   if constexpr (std::is_void_v<T>) {
     return JS_UNDEFINED;
@@ -364,7 +360,7 @@ JSValue to_js(JSContext *ctx, R &&r) {
     return std::forward<R>(r);
   } else if constexpr (std::same_as<T, std::string> ||
                        std::same_as<T, std::string_view> ||
-                       std::same_as<T, const char *>) {
+                       std::same_as<T, const char*>) {
     std::string_view s = r;
     return JS_NewStringLen(ctx, s.data(), s.size());
   } else if constexpr (std::same_as<T, int32_t>) {
@@ -382,8 +378,7 @@ struct fn_traits<Fn> {
   using return_type = R;
   using args_tuple = std::tuple<Args...>;
   static constexpr std::size_t arity = sizeof...(Args);
-  static constexpr bool ok =
-      JsReturnType<R> && (JsArgType<Args> && ...);
+  static constexpr bool ok = JsReturnType<R> && (JsArgType<Args> && ...);
 };
 
 template <typename R, typename... Args, R (*Fn)(Args...) noexcept>
@@ -391,8 +386,7 @@ struct fn_traits<Fn> {
   using return_type = R;
   using args_tuple = std::tuple<Args...>;
   static constexpr std::size_t arity = sizeof...(Args);
-  static constexpr bool ok =
-      JsReturnType<R> && (JsArgType<Args> && ...);
+  static constexpr bool ok = JsReturnType<R> && (JsArgType<Args> && ...);
 };
 
 // 兜底：非函数指针 / 无法解构时 ok = false
@@ -405,13 +399,12 @@ struct fn_traits {
 };
 
 template <auto Fn>
-concept NativeFn = requires {
-  typename fn_traits<Fn>::args_tuple;
-} && fn_traits<Fn>::ok;
+concept NativeFn =
+    requires { typename fn_traits<Fn>::args_tuple; } && fn_traits<Fn>::ok;
 
 template <typename T>
-constexpr bool is_injected_v = std::same_as<T, Ctx> || std::same_as<T, This> ||
-                               OpaquePtr<T>;
+constexpr bool is_injected_v =
+    std::same_as<T, Ctx> || std::same_as<T, This> || OpaquePtr<T>;
 
 template <typename Tuple, std::size_t I = 0>
 constexpr int js_arity() {
@@ -433,8 +426,8 @@ constexpr int js_arity() {
 
 template <auto Fn, typename Tuple, std::size_t... I>
   requires NativeFn<Fn>
-JSValue invoke_impl(JSContext *ctx, JSValueConst this_val, int argc,
-                    JSValueConst *argv, std::index_sequence<I...>) {
+JSValue invoke_impl(JSContext* ctx, JSValueConst this_val, int argc,
+                    JSValueConst* argv, std::index_sequence<I...>) {
   int index = 0;
   auto args = std::tuple<std::tuple_element_t<I, Tuple>...>{
       pull_arg<std::tuple_element_t<I, Tuple>>(ctx, this_val, argc, argv,
@@ -451,17 +444,17 @@ JSValue invoke_impl(JSContext *ctx, JSValueConst this_val, int argc,
 
 template <auto Fn>
   requires NativeFn<Fn>
-JSValue trampoline(JSContext *ctx, JSValueConst this_val, int argc,
-                   JSValueConst *argv) {
+JSValue trampoline(JSContext* ctx, JSValueConst this_val, int argc,
+                   JSValueConst* argv) {
   using traits = fn_traits<Fn>;
   using Tuple = typename traits::args_tuple;
   try {
     return invoke_impl<Fn, Tuple>(
         ctx, this_val, argc, argv,
         std::make_index_sequence<std::tuple_size_v<Tuple>>{});
-  } catch (const ConvertError &) {
+  } catch (const ConvertError&) {
     return JS_EXCEPTION;
-  } catch (const std::runtime_error &) {
+  } catch (const std::runtime_error&) {
     return JS_EXCEPTION;
   }
 }
@@ -473,33 +466,35 @@ constexpr int length_of() {
   return js_arity<Tuple>();
 }
 
-} // namespace detail
+}  // namespace detail
 
 // rquickjs-like: Func<&fn>::create(ctx, "name")
 // 约束：Fn 必须是自由函数指针，参数/返回值在白名单内
 template <auto Fn>
   requires detail::NativeFn<Fn>
 struct Func {
-  static Value create(JSContext *ctx, const char *name) {
+  static Value create(JSContext* ctx, const char* name) {
     return Value::take(ctx, JS_NewCFunction(ctx, &detail::trampoline<Fn>, name,
                                             detail::length_of<Fn>()));
   }
-  static Value create(Ctx ctx, const char *name) {
+  static Value create(Ctx ctx, const char* name) {
     return create(ctx.get(), name);
   }
 };
 
 template <auto Fn>
-Value Ctx::func(const char *name) const {
-  static_assert(detail::NativeFn<Fn>,
-                "Func<&fn>: unsupported signature (see JsArgType / JsReturnType)");
+Value Ctx::func(const char* name) const {
+  static_assert(
+      detail::NativeFn<Fn>,
+      "Func<&fn>: unsupported signature (see JsArgType / JsReturnType)");
   return Func<Fn>::create(ctx_, name);
 }
 
 template <auto Fn>
-void Value::fn(const char *name) {
-  static_assert(detail::NativeFn<Fn>,
-                "Value::fn<&fn>: unsupported signature (see JsArgType / JsReturnType)");
+void Value::fn(const char* name) {
+  static_assert(
+      detail::NativeFn<Fn>,
+      "Value::fn<&fn>: unsupported signature (see JsArgType / JsReturnType)");
   set(name, Func<Fn>::create(ctx_, name));
 }
 
@@ -507,7 +502,7 @@ void Value::fn(const char *name) {
 // Owning Runtime / Context
 // ---------------------------------------------------------------------------
 class Runtime {
-public:
+ public:
   Runtime() : rt_(JS_NewRuntime()) {}
   ~Runtime() {
     if (rt_) {
@@ -515,11 +510,11 @@ public:
     }
   }
 
-  Runtime(const Runtime &) = delete;
-  Runtime &operator=(const Runtime &) = delete;
+  Runtime(const Runtime&) = delete;
+  Runtime& operator=(const Runtime&) = delete;
 
-  Runtime(Runtime &&o) noexcept : rt_(o.rt_) { o.rt_ = nullptr; }
-  Runtime &operator=(Runtime &&o) noexcept {
+  Runtime(Runtime&& o) noexcept : rt_(o.rt_) { o.rt_ = nullptr; }
+  Runtime& operator=(Runtime&& o) noexcept {
     if (this != &o) {
       if (rt_) {
         JS_FreeRuntime(rt_);
@@ -531,12 +526,12 @@ public:
   }
 
   explicit operator bool() const { return rt_ != nullptr; }
-  JSRuntime *get() const { return rt_; }
+  JSRuntime* get() const { return rt_; }
   bool job_pending() const { return JS_IsJobPending(rt_); }
 
   bool drain_jobs() {
     bool ok = true;
-    JSContext *job_ctx = nullptr;
+    JSContext* job_ctx = nullptr;
     while (JS_IsJobPending(rt_)) {
       if (JS_ExecutePendingJob(rt_, &job_ctx) < 0) {
         ok = false;
@@ -548,31 +543,31 @@ public:
     return ok;
   }
 
-private:
-  JSRuntime *rt_ = nullptr;
+ private:
+  JSRuntime* rt_ = nullptr;
 };
 
 class Context {
-public:
-  explicit Context(Runtime &rt) : ctx_(JS_NewContext(rt.get())) {}
+ public:
+  explicit Context(Runtime& rt) : ctx_(JS_NewContext(rt.get())) {}
   ~Context() {
     if (ctx_) {
       JS_FreeContext(ctx_);
     }
   }
 
-  Context(const Context &) = delete;
-  Context &operator=(const Context &) = delete;
+  Context(const Context&) = delete;
+  Context& operator=(const Context&) = delete;
 
   explicit operator bool() const { return ctx_ != nullptr; }
-  JSContext *get() const { return ctx_; }
+  JSContext* get() const { return ctx_; }
   Ctx ref() const { return Ctx{ctx_}; }
 
-  void set_opaque(void *p) { JS_SetContextOpaque(ctx_, p); }
+  void set_opaque(void* p) { JS_SetContextOpaque(ctx_, p); }
 
   template <typename T>
-  T *opaque() const {
-    return static_cast<T *>(JS_GetContextOpaque(ctx_));
+  T* opaque() const {
+    return static_cast<T*>(JS_GetContextOpaque(ctx_));
   }
 
   Value global() { return Value::take(ctx_, JS_GetGlobalObject(ctx_)); }
@@ -581,20 +576,20 @@ public:
   Value new_int32(int32_t v) { return ref().new_int32(v); }
   Value new_string(std::string_view s) { return ref().new_string(s); }
 
-  Value eval(std::string_view code, const char *filename, int flags) {
-    return Value::take(ctx_, JS_Eval(ctx_, code.data(), code.size(), filename,
-                                     flags));
+  Value eval(std::string_view code, const char* filename, int flags) {
+    return Value::take(
+        ctx_, JS_Eval(ctx_, code.data(), code.size(), filename, flags));
   }
 
   void dump_exception() { ref().dump_exception(); }
 
   template <auto Fn>
-  Value func(const char *name) {
+  Value func(const char* name) {
     return Func<Fn>::create(ctx_, name);
   }
 
-private:
-  JSContext *ctx_ = nullptr;
+ private:
+  JSContext* ctx_ = nullptr;
 };
 
 struct PromiseCapability {
@@ -602,7 +597,7 @@ struct PromiseCapability {
   Value resolve;
   Value reject;
 
-  static std::optional<PromiseCapability> create(JSContext *ctx) {
+  static std::optional<PromiseCapability> create(JSContext* ctx) {
     JSValue funcs[2];
     JSValue p = JS_NewPromiseCapability(ctx, funcs);
     if (JS_IsException(p)) {
@@ -619,9 +614,9 @@ struct PromiseCapability {
     return create(ctx.get());
   }
 
-  static std::optional<PromiseCapability> create(Context &ctx) {
+  static std::optional<PromiseCapability> create(Context& ctx) {
     return create(ctx.get());
   }
 };
 
-} // namespace qjs
+}  // namespace qjs

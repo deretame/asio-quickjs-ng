@@ -1,7 +1,6 @@
 #pragma once
 
 #include <asio.hpp>
-
 #include <atomic>
 #include <chrono>
 #include <map>
@@ -15,7 +14,7 @@
 // Minimal loopback HTTP/1.1 server for fetch tests (separate thread/ioc).
 // Acts as a stand-in for wptserve resources used by fetch WPT.
 class HttpTestServer {
-public:
+ public:
   HttpTestServer() : acceptor_(ioc_) {}
 
   ~HttpTestServer() { stop(); }
@@ -53,16 +52,16 @@ public:
     return "http://127.0.0.1:" + std::to_string(port_);
   }
 
-private:
+ private:
   struct Conn : std::enable_shared_from_this<Conn> {
-    explicit Conn(asio::io_context &ioc) : sock(ioc) {}
+    explicit Conn(asio::io_context& ioc) : sock(ioc) {}
     asio::ip::tcp::socket sock;
     asio::streambuf buf;
   };
 
   void do_accept() {
     auto c = std::make_shared<Conn>(ioc_);
-    acceptor_.async_accept(c->sock, [this, c](const asio::error_code &ec) {
+    acceptor_.async_accept(c->sock, [this, c](const asio::error_code& ec) {
       if (!ec && running_) {
         do_read(c);
         do_accept();
@@ -73,7 +72,7 @@ private:
   void do_read(std::shared_ptr<Conn> c) {
     asio::async_read_until(
         c->sock, c->buf, "\r\n\r\n",
-        [this, c](const asio::error_code &ec, std::size_t n) {
+        [this, c](const asio::error_code& ec, std::size_t n) {
           if (ec) {
             return;
           }
@@ -107,7 +106,7 @@ private:
             while (!value.empty() && (value[0] == ' ' || value[0] == '\t')) {
               value.erase(value.begin());
             }
-            for (char &ch : name) {
+            for (char& ch : name) {
               if (ch >= 'A' && ch <= 'Z') {
                 ch = static_cast<char>(ch - 'A' + 'a');
               }
@@ -143,7 +142,7 @@ private:
               auto msg = std::make_shared<std::string>(std::move(resp));
               asio::async_write(
                   c->sock, asio::buffer(*msg),
-                  [c, msg](const asio::error_code &, std::size_t) {
+                  [c, msg](const asio::error_code&, std::size_t) {
                     asio::error_code ec2;
                     c->sock.shutdown(asio::ip::tcp::socket::shutdown_both, ec2);
                     c->sock.close(ec2);
@@ -157,7 +156,7 @@ private:
             auto timer = std::make_shared<asio::steady_timer>(
                 c->sock.get_executor(), std::chrono::milliseconds(delay_ms));
             timer->async_wait([timer, write_resp = std::move(write_resp)](
-                                  const asio::error_code &err) mutable {
+                                  const asio::error_code& err) mutable {
               if (!err) {
                 write_resp();
               }
@@ -181,7 +180,7 @@ private:
           const std::size_t need = content_length - c->buf.size();
           asio::async_read(
               c->sock, c->buf, asio::transfer_exactly(need),
-              [c, content_length, finish](const asio::error_code &ec2,
+              [c, content_length, finish](const asio::error_code& ec2,
                                           std::size_t) mutable {
                 if (ec2) {
                   return;
@@ -197,9 +196,9 @@ private:
   }
 
   static std::string build_response(
-      const std::string &method, const std::string &target,
-      const std::map<std::string, std::string> &headers,
-      const std::string &req_body) {
+      const std::string& method, const std::string& target,
+      const std::map<std::string, std::string>& headers,
+      const std::string& req_body) {
     std::string path = target;
     std::string query;
     auto q = path.find('?');
@@ -283,7 +282,7 @@ private:
     out << "Content-Type: " << content_type << "\r\n";
     out << "Content-Length: " << body.size() << "\r\n";
     out << "Connection: close\r\n";
-    for (const auto &h : extra) {
+    for (const auto& h : extra) {
       out << h.first << ": " << h.second << "\r\n";
     }
     out << "X-Test-Server: asio-qjs\r\n";

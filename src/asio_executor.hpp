@@ -1,14 +1,14 @@
 #pragma once
 
-#include <asio.hpp>
 #include <async_simple/Executor.h>
 
+#include <asio.hpp>
 #include <utility>
 
 // Schedule async_simple tasks onto asio::io_context (single-threaded OK).
 class AsioExecutor : public async_simple::Executor {
-public:
-  explicit AsioExecutor(asio::io_context &ioc) : ioc_(ioc) {}
+ public:
+  explicit AsioExecutor(asio::io_context& ioc) : ioc_(ioc) {}
 
   bool schedule(Func func) override {
     asio::post(ioc_, std::move(func));
@@ -25,12 +25,12 @@ public:
     return true;
   }
 
-  bool checkin(Func func, void * /*ctx*/) override {
+  bool checkin(Func func, void* /*ctx*/) override {
     asio::dispatch(ioc_, std::move(func));
     return true;
   }
 
-  void *checkout() override { return &ioc_; }
+  void* checkout() override { return &ioc_; }
 
   bool currentThreadInExecutor() const override { return true; }
 
@@ -38,13 +38,12 @@ public:
     return reinterpret_cast<size_t>(&ioc_);
   }
 
-private:
+ private:
   void schedule(Func func, Duration dur) override {
     auto timer = std::make_shared<asio::steady_timer>(ioc_, dur);
-    timer->async_wait([fn = std::move(func), timer](const asio::error_code &) {
-      fn();
-    });
+    timer->async_wait(
+        [fn = std::move(func), timer](const asio::error_code&) { fn(); });
   }
 
-  asio::io_context &ioc_;
+  asio::io_context& ioc_;
 };

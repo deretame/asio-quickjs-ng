@@ -65,7 +65,7 @@ struct oneshot_state {
   }
 };
 
-} // namespace detail
+}  // namespace detail
 
 // ---------------------------------------------------------------------------
 // mpsc::unbounded
@@ -77,17 +77,18 @@ class Receiver;
 
 template <channel_value T>
 class Sender {
-public:
+ public:
   Sender() = default;
-  explicit Sender(std::shared_ptr<detail::mpsc_state<T>> s) : state_(std::move(s)) {}
+  explicit Sender(std::shared_ptr<detail::mpsc_state<T>> s)
+      : state_(std::move(s)) {}
 
-  Sender(const Sender &o) : state_(o.state_) {
+  Sender(const Sender& o) : state_(o.state_) {
     if (state_) {
       ++state_->senders;
     }
   }
 
-  Sender &operator=(const Sender &o) {
+  Sender& operator=(const Sender& o) {
     if (this == &o) {
       return *this;
     }
@@ -99,9 +100,9 @@ public:
     return *this;
   }
 
-  Sender(Sender &&o) noexcept : state_(std::move(o.state_)) {}
+  Sender(Sender&& o) noexcept : state_(std::move(o.state_)) {}
 
-  Sender &operator=(Sender &&o) noexcept {
+  Sender& operator=(Sender&& o) noexcept {
     if (this == &o) {
       return *this;
     }
@@ -131,7 +132,7 @@ public:
 
   bool is_closed() const { return !state_ || state_->closed; }
 
-private:
+ private:
   void release() {
     if (!state_) {
       return;
@@ -147,17 +148,17 @@ private:
 
 template <channel_value T>
 class Receiver {
-public:
+ public:
   Receiver() = default;
   explicit Receiver(std::shared_ptr<detail::mpsc_state<T>> s)
       : state_(std::move(s)) {}
 
-  Receiver(const Receiver &) = delete;
-  Receiver &operator=(const Receiver &) = delete;
+  Receiver(const Receiver&) = delete;
+  Receiver& operator=(const Receiver&) = delete;
 
-  Receiver(Receiver &&o) noexcept : state_(std::move(o.state_)) {}
+  Receiver(Receiver&& o) noexcept : state_(std::move(o.state_)) {}
 
-  Receiver &operator=(Receiver &&o) noexcept {
+  Receiver& operator=(Receiver&& o) noexcept {
     if (this != &o) {
       close_rx();
       state_ = std::move(o.state_);
@@ -172,11 +173,9 @@ public:
   // co_await rx.recv() -> optional<T>  (nullopt if closed & empty)
   auto recv() {
     struct Awaiter {
-      detail::mpsc_state<T> *st;
+      detail::mpsc_state<T>* st;
 
-      bool await_ready() const {
-        return !st->queue.empty() || st->closed;
-      }
+      bool await_ready() const { return !st->queue.empty() || st->closed; }
 
       void await_suspend(std::coroutine_handle<> h) { st->waiter = h; }
 
@@ -203,7 +202,7 @@ public:
 
   bool is_closed() const { return !state_ || state_->closed; }
 
-private:
+ private:
   void close_rx() {
     if (state_) {
       state_->close();
@@ -226,7 +225,7 @@ Pair<T> unbounded() {
   return {Sender<T>{st}, Receiver<T>{st}};
 }
 
-} // namespace mpsc
+}  // namespace mpsc
 
 // ---------------------------------------------------------------------------
 // oneshot
@@ -238,15 +237,15 @@ class Receiver;
 
 template <channel_value T>
 class Sender {
-public:
+ public:
   Sender() = default;
   explicit Sender(std::shared_ptr<detail::oneshot_state<T>> s)
       : state_(std::move(s)) {}
 
-  Sender(const Sender &) = delete;
-  Sender &operator=(const Sender &) = delete;
-  Sender(Sender &&o) noexcept : state_(std::move(o.state_)) {}
-  Sender &operator=(Sender &&o) noexcept {
+  Sender(const Sender&) = delete;
+  Sender& operator=(const Sender&) = delete;
+  Sender(Sender&& o) noexcept : state_(std::move(o.state_)) {}
+  Sender& operator=(Sender&& o) noexcept {
     if (this != &o) {
       close();
       state_ = std::move(o.state_);
@@ -280,27 +279,27 @@ public:
     state_.reset();
   }
 
-private:
+ private:
   std::shared_ptr<detail::oneshot_state<T>> state_;
 };
 
 template <channel_value T>
 class Receiver {
-public:
+ public:
   Receiver() = default;
   explicit Receiver(std::shared_ptr<detail::oneshot_state<T>> s)
       : state_(std::move(s)) {}
 
-  Receiver(const Receiver &) = delete;
-  Receiver &operator=(const Receiver &) = delete;
-  Receiver(Receiver &&) noexcept = default;
-  Receiver &operator=(Receiver &&) noexcept = default;
+  Receiver(const Receiver&) = delete;
+  Receiver& operator=(const Receiver&) = delete;
+  Receiver(Receiver&&) noexcept = default;
+  Receiver& operator=(Receiver&&) noexcept = default;
 
   explicit operator bool() const { return static_cast<bool>(state_); }
 
   auto recv() {
     struct Awaiter {
-      detail::oneshot_state<T> *st;
+      detail::oneshot_state<T>* st;
 
       bool await_ready() const { return st->sent || st->closed; }
 
@@ -318,11 +317,9 @@ public:
     return Awaiter{state_.get()};
   }
 
-  bool is_ready() const {
-    return state_ && (state_->sent || state_->closed);
-  }
+  bool is_ready() const { return state_ && (state_->sent || state_->closed); }
 
-private:
+ private:
   std::shared_ptr<detail::oneshot_state<T>> state_;
 };
 
@@ -338,6 +335,6 @@ Pair<T> channel() {
   return {Sender<T>{st}, Receiver<T>{st}};
 }
 
-} // namespace oneshot
+}  // namespace oneshot
 
-} // namespace co
+}  // namespace co

@@ -1,5 +1,4 @@
 #include "fetch.hpp"
-#include "curl_runtime.hpp"
 
 #include <async_simple/Promise.h>
 #include <async_simple/coro/FutureAwaiter.h>
@@ -8,6 +7,8 @@
 #include <string>
 #include <string_view>
 #include <utility>
+
+#include "curl_runtime.hpp"
 
 namespace {
 
@@ -51,8 +52,10 @@ struct EmbeddedJs {
 
 constexpr EmbeddedJs kBootstrapJs[] = {
     {"js/abort.js", kJsAbortBytes, sizeof(kJsAbortBytes)},
-    {"js/text-encoding-polyfill.js", kJsTextEncodingPolyfillBytes, sizeof(kJsTextEncodingPolyfillBytes)},
-    {"js/whatwg-url-polyfill.js", kJsWhatwgUrlPolyfillBytes, sizeof(kJsWhatwgUrlPolyfillBytes)},
+    {"js/text-encoding-polyfill.js", kJsTextEncodingPolyfillBytes,
+     sizeof(kJsTextEncodingPolyfillBytes)},
+    {"js/whatwg-url-polyfill.js", kJsWhatwgUrlPolyfillBytes,
+     sizeof(kJsWhatwgUrlPolyfillBytes)},
     {"js/body_polyfill.js", kJsBodyPolyfillBytes, sizeof(kJsBodyPolyfillBytes)},
     {"js/headers.js", kJsHeadersBytes, sizeof(kJsHeadersBytes)},
     {"js/request.js", kJsRequestBytes, sizeof(kJsRequestBytes)},
@@ -200,7 +203,7 @@ bool install_bootstrap_js(Host& host) {
 
 namespace fetch_api {
 
-Lazy<FetchResult> async_fetch(Host &host, FetchOptions options, uint64_t id) {
+Lazy<FetchResult> async_fetch(Host& host, FetchOptions options, uint64_t id) {
   Promise<FetchResult> p;
   auto fut = p.getFuture();
 
@@ -213,7 +216,7 @@ Lazy<FetchResult> async_fetch(Host &host, FetchOptions options, uint64_t id) {
     co_return std::move(r);
   }
 
-  auto *tr = new Transfer();
+  auto* tr = new Transfer();
   tr->options = std::move(options);
   tr->id = id;
   tr->complete = [p = std::move(p)](FetchResult result) mutable {
@@ -241,7 +244,7 @@ Lazy<FetchResult> async_fetch(Host &host, FetchOptions options, uint64_t id) {
   co_return result;
 }
 
-qjs::Value native_fetch_fn(Host *host, qjs::Value opts) {
+qjs::Value native_fetch_fn(Host* host, qjs::Value opts) {
   FetchOptions options = parse_options(host->js_raw(), opts.raw());
   const uint64_t id = host->next_fetch_id++;
 

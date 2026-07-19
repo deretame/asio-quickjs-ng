@@ -3,7 +3,6 @@
 #include <nlohmann/json.hpp>
 #include <rfl.hpp>
 #include <rfl/json.hpp>
-
 #include <string>
 
 namespace {
@@ -13,7 +12,7 @@ struct Person {
   int age = 0;
 };
 
-} // namespace
+}  // namespace
 
 TEST(NlohmannJson, ParseDynamic) {
   using json = nlohmann::json;

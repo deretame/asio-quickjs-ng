@@ -1,11 +1,6 @@
-// Runs official WPT fetch tests + local suites. Network fixtures via Node server.
-#include "curl_http.hpp"
-#include "fetch.hpp"
-#include "host.hpp"
-#include "qjs.hpp"
-
+// Runs official WPT fetch tests + local suites. Network fixtures via Node
+// server.
 #include <gtest/gtest.h>
-
 #include <spdlog/spdlog.h>
 
 #include <chrono>
@@ -17,6 +12,11 @@
 #include <string_view>
 #include <thread>
 #include <vector>
+
+#include "curl_http.hpp"
+#include "fetch.hpp"
+#include "host.hpp"
+#include "qjs.hpp"
 
 #ifdef _WIN32
 #include <windows.h>
@@ -31,7 +31,7 @@ namespace fs = std::filesystem;
 
 namespace {
 
-std::string read_file(const fs::path &p) {
+std::string read_file(const fs::path& p) {
   std::ifstream in(p, std::ios::binary);
   if (!in) {
     return {};
@@ -41,7 +41,7 @@ std::string read_file(const fs::path &p) {
   return ss.str();
 }
 
-std::string quote_js(const std::string &s) {
+std::string quote_js(const std::string& s) {
   std::string out = "\"";
   for (unsigned char c : s) {
     if (c == '\\' || c == '"') {
@@ -125,7 +125,7 @@ std::string strip_meta(std::string_view src) {
 }
 
 fs::path wpt_root() {
-  const char *env = std::getenv("WPT_ROOT");
+  const char* env = std::getenv("WPT_ROOT");
   if (env && *env) {
     return fs::path(env);
   }
@@ -135,7 +135,7 @@ fs::path wpt_root() {
       fs::path("../../third_party/wpt"),
       fs::path(ASIO_QJS_SOURCE_DIR) / "third_party" / "wpt",
   };
-  for (const auto &c : candidates) {
+  for (const auto& c : candidates) {
     if (fs::exists(c / "resources" / "testharness.js")) {
       return fs::weakly_canonical(c);
     }
@@ -143,11 +143,11 @@ fs::path wpt_root() {
   return {};
 }
 
-fs::path repo_root_from_wpt(const fs::path &wpt) {
+fs::path repo_root_from_wpt(const fs::path& wpt) {
   return wpt.parent_path().parent_path();
 }
 
-bool eval_path(Host &host, const fs::path &p, bool drain = true) {
+bool eval_path(Host& host, const fs::path& p, bool drain = true) {
   auto code = read_file(p);
   if (code.empty() && !fs::exists(p)) {
     return false;
@@ -157,8 +157,8 @@ bool eval_path(Host &host, const fs::path &p, bool drain = true) {
 
 // --- Node fixture server ---
 class NodeFixtureServer {
-public:
-  bool start(const fs::path &repo) {
+ public:
+  bool start(const fs::path& repo) {
     script_ = repo / "tests" / "wpt" / "node_test_server.mjs";
     if (!fs::exists(script_)) {
       return false;
@@ -211,8 +211,7 @@ public:
     std::string line;
     char ch;
     DWORD n = 0;
-    auto deadline =
-        std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
     while (std::chrono::steady_clock::now() < deadline) {
       DWORD avail = 0;
       if (!PeekNamedPipe(out_rd_, nullptr, 0, nullptr, &avail, nullptr)) {
@@ -261,7 +260,7 @@ public:
       close(in_pipe[0]);
       close(in_pipe[1]);
       auto script = script_.string();
-      execlp("node", "node", script.c_str(), static_cast<char *>(nullptr));
+      execlp("node", "node", script.c_str(), static_cast<char*>(nullptr));
       _exit(127);
     }
     close(out_pipe[1]);
@@ -272,8 +271,7 @@ public:
 
     std::string line;
     char ch;
-    auto deadline =
-        std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
     while (std::chrono::steady_clock::now() < deadline) {
       fd_set rfds;
       FD_ZERO(&rfds);
@@ -306,7 +304,7 @@ public:
 #ifdef _WIN32
     if (in_wr_) {
       DWORD w = 0;
-      const char *q = "quit\n";
+      const char* q = "quit\n";
       WriteFile(in_wr_, q, 5, &w, nullptr);
       CloseHandle(in_wr_);
       in_wr_ = nullptr;
@@ -324,7 +322,7 @@ public:
     }
 #else
     if (in_fd_ >= 0) {
-      const char *q = "quit\n";
+      const char* q = "quit\n";
       (void)write(in_fd_, q, 5);
       close(in_fd_);
       in_fd_ = -1;
@@ -352,9 +350,9 @@ public:
     origin_.clear();
   }
 
-  const std::string &origin() const { return origin_; }
+  const std::string& origin() const { return origin_; }
 
-private:
+ private:
   fs::path script_;
   std::string origin_;
 #ifdef _WIN32
@@ -377,14 +375,14 @@ struct FileResult {
   std::string harness_error;
 };
 
-bool needs_fixture(const std::string &entry) {
+bool needs_fixture(const std::string& entry) {
   return entry.find("abort-network") != std::string::npos ||
          entry.find("network") != std::string::npos;
 }
 
-FileResult run_wpt_file(Host &host, const fs::path &wpt, const fs::path &repo,
-                        const std::string &entry,
-                        const std::string &fixture_origin) {
+FileResult run_wpt_file(Host& host, const fs::path& wpt, const fs::path& repo,
+                        const std::string& entry,
+                        const std::string& fixture_origin) {
   FileResult fr;
   fr.path = entry;
 
@@ -414,9 +412,9 @@ FileResult run_wpt_file(Host &host, const fs::path &wpt, const fs::path &repo,
   }
 
   if (!fixture_origin.empty()) {
-    host.eval_source("globalThis.__TEST_ORIGIN = " + quote_js(fixture_origin) +
-                         ";",
-                     "fixture_origin.js", false);
+    host.eval_source(
+        "globalThis.__TEST_ORIGIN = " + quote_js(fixture_origin) + ";",
+        "fixture_origin.js", false);
   }
 
   if (!meta.title.empty()) {
@@ -424,7 +422,7 @@ FileResult run_wpt_file(Host &host, const fs::path &wpt, const fs::path &repo,
                      "meta_title.js", false);
   }
 
-  for (const auto &s : meta.scripts) {
+  for (const auto& s : meta.scripts) {
     fs::path sp = dir / s;
     if (!fs::exists(sp)) {
       sp = wpt / s;
@@ -521,7 +519,7 @@ FileResult run_wpt_file(Host &host, const fs::path &wpt, const fs::path &repo,
   return fr;
 }
 
-std::vector<std::string> load_manifest(const fs::path &repo) {
+std::vector<std::string> load_manifest(const fs::path& repo) {
   auto text = read_file(repo / "tests" / "wpt" / "manifest.txt");
   std::vector<std::string> out;
   std::istringstream ss(text);
@@ -538,10 +536,10 @@ std::vector<std::string> load_manifest(const fs::path &repo) {
   return out;
 }
 
-} // namespace
+}  // namespace
 
 class WptFetch : public ::testing::Test {
-protected:
+ protected:
   void SetUp() override {
     wpt_ = wpt_root();
     ASSERT_FALSE(wpt_.empty())
@@ -553,7 +551,7 @@ protected:
 
   void TearDown() override { node_.stop(); }
 
-  bool setup_host(Host &host) {
+  bool setup_host(Host& host) {
     return host && host.install_runtime() && fetch_api::install(host);
   }
 
@@ -569,13 +567,13 @@ TEST_F(WptFetch, OfficialManifest) {
   int total_pass = 0, total_fail = 0, total_skip = 0;
   std::ostringstream summary;
 
-  for (const auto &rel : files) {
+  for (const auto& rel : files) {
     Host host;
     ASSERT_TRUE(setup_host(host));
-    const std::string &origin =
+    const std::string& origin =
         needs_fixture(rel) || rel.find("external") != std::string::npos
             ? node_.origin()
-            : node_.origin(); // always inject; harmless for offline suites
+            : node_.origin();  // always inject; harmless for offline suites
     auto fr = run_wpt_file(host, wpt_, repo_, rel, origin);
     host.shutdown();
 
@@ -588,7 +586,7 @@ TEST_F(WptFetch, OfficialManifest) {
     if (!fr.harness_error.empty()) {
       summary << "  HARNESS: " << fr.harness_error << "\n";
     }
-    for (const auto &f : fr.failures) {
+    for (const auto& f : fr.failures) {
       summary << f << "\n";
     }
 
@@ -600,9 +598,8 @@ TEST_F(WptFetch, OfficialManifest) {
   RecordProperty("wpt_pass", std::to_string(total_pass));
   RecordProperty("wpt_fail", std::to_string(total_fail));
   RecordProperty("wpt_skip", std::to_string(total_skip));
-  spdlog::info("fixture {}\n{}\nTOTAL pass={} fail={} skip={}",
-               node_.origin(), summary.str(), total_pass, total_fail,
-               total_skip);
+  spdlog::info("fixture {}\n{}\nTOTAL pass={} fail={} skip={}", node_.origin(),
+               summary.str(), total_pass, total_fail, total_skip);
   EXPECT_GT(total_pass, 0);
   EXPECT_EQ(total_fail, 0);
 }

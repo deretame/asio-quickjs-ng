@@ -1,15 +1,15 @@
 // Host ID tests: each Host instance gets a unique ID (UUID v4 by default).
-#include "host.hpp"
-#include "qjs.hpp"
-
 #include <gtest/gtest.h>
 
 #include <set>
 #include <string>
 
+#include "host.hpp"
+#include "qjs.hpp"
+
 namespace {
 
-bool setup_host(Host &host) {
+bool setup_host(Host& host) {
   if (!host) {
     return false;
   }
@@ -21,7 +21,7 @@ std::string js_str(qjs::Value v) {
   return s.value_or("");
 }
 
-} // namespace
+}  // namespace
 
 TEST(HostId, PerInstanceIdIsUnique) {
   Host h1;
@@ -46,11 +46,11 @@ TEST(HostId, DefaultIdIsUuidV4Shape) {
   Host host;
   ASSERT_TRUE(host);
 
-  const std::string &id = host.id();
+  const std::string& id = host.id();
   ASSERT_EQ(id.length(), 36u);
   EXPECT_EQ(id[8], '-');
   EXPECT_EQ(id[13], '-');
-  EXPECT_EQ(id[14], '4'); // version nibble
+  EXPECT_EQ(id[14], '4');  // version nibble
   EXPECT_EQ(id[18], '-');
   // Variant RFC 4122: byte 8's top two bits are 10 -> high nibble is 8/9/a/b.
   char variant_nibble = id[19];

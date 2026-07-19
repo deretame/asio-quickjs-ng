@@ -1,4 +1,3 @@
-#include "function_registry.hpp"
 #include "host.hpp"
 
 #include <spdlog/spdlog.h>
@@ -11,6 +10,8 @@
 #include <sstream>
 #include <stdexcept>
 #include <utility>
+
+#include "function_registry.hpp"
 
 namespace {
 
@@ -40,8 +41,8 @@ void console_log_fn(qjs::Args args) { log_args(spdlog::level::info, args); }
 void console_warn_fn(qjs::Args args) { log_args(spdlog::level::warn, args); }
 void console_error_fn(qjs::Args args) { log_args(spdlog::level::err, args); }
 
-async_simple::coro::Lazy<void>
-timeout_coro(Host *host, qjs::Value callback, std::chrono::milliseconds delay) {
+async_simple::coro::Lazy<void> timeout_coro(Host* host, qjs::Value callback,
+                                            std::chrono::milliseconds delay) {
   co_await host->async_sleep(delay);
   if (!host->stopping) {
     qjs::Value ret = callback.call();
@@ -54,7 +55,7 @@ timeout_coro(Host *host, qjs::Value callback, std::chrono::milliseconds delay) {
   co_return;
 }
 
-void set_timeout_fn(Host *host, qjs::Value callback,
+void set_timeout_fn(Host* host, qjs::Value callback,
                     std::optional<int32_t> delay_ms) {
   if (!callback.is_function()) {
     host->throw_type_error("setTimeout(fn, ms)");
@@ -64,11 +65,11 @@ void set_timeout_fn(Host *host, qjs::Value callback,
     ms = 0;
   }
   ++host->pending_ops;
-  host->spawn_lazy(timeout_coro(host, std::move(callback),
-                                std::chrono::milliseconds(ms)));
+  host->spawn_lazy(
+      timeout_coro(host, std::move(callback), std::chrono::milliseconds(ms)));
 }
 
-} // namespace
+}  // namespace
 
 Host::Host() {
   std::random_device rd;
@@ -81,41 +82,38 @@ Host::Host(std::string id) : host_id(std::move(id)) {}
 
 Host::~Host() { shutdown(); }
 
-void Host::spdlog_lazy_error(const char *msg) {
+void Host::spdlog_lazy_error(const char* msg) {
   spdlog::error("lazy exception: {}", msg);
 }
 
-void Host::register_function(const std::string &name, SyncFunction fn) {
+void Host::register_function(const std::string& name, SyncFunction fn) {
   registry.register_function(name, std::move(fn));
 }
 
-void Host::register_async_function(const std::string &name,
-                                   AsyncFunction fn) {
+void Host::register_async_function(const std::string& name, AsyncFunction fn) {
   registry.register_async_function(name, std::move(fn));
 }
 
 void Host::shutdown() { stopping = true; }
 
-void Host::throw_type_error(const char *msg) {
+void Host::throw_type_error(const char* msg) {
   JS_ThrowTypeError(ctx.get(), "%s", msg);
   throw std::runtime_error(msg);
 }
 
-void Host::throw_internal_error(const char *msg) {
+void Host::throw_internal_error(const char* msg) {
   JS_ThrowInternalError(ctx.get(), "%s", msg);
   throw std::runtime_error(msg);
 }
 
-async_simple::coro::Lazy<void>
-Host::async_sleep(std::chrono::milliseconds ms) {
+async_simple::coro::Lazy<void> Host::async_sleep(std::chrono::milliseconds ms) {
   async_simple::Promise<void> p;
   auto fut = p.getFuture();
   auto timer = std::make_shared<asio::steady_timer>(ioc);
   timer->expires_after(ms);
-  timer->async_wait(
-      [p = std::move(p), timer](const asio::error_code &) mutable {
-        p.setValue();
-      });
+  timer->async_wait([p = std::move(p), timer](const asio::error_code&) mutable {
+    p.setValue();
+  });
   co_await std::move(fut);
   co_return;
 }
@@ -125,7 +123,7 @@ bool Host::install_runtime() {
   auto g = global();
   g.fn<&print_fn>("print");
   g.fn<&set_timeout_fn>("setTimeout");
-  g.obj("console", [](qjs::Value &c) {
+  g.obj("console", [](qjs::Value& c) {
     c.fn<&console_log_fn>("log");
     c.fn<&console_debug_fn>("debug");
     c.fn<&console_info_fn>("info");
@@ -139,7 +137,7 @@ bool Host::install_runtime() {
   return true;
 }
 
-bool Host::eval_source(std::string_view code, const char *filename,
+bool Host::eval_source(std::string_view code, const char* filename,
                        bool drain) {
   qjs::Value ret = ctx.eval(code, filename, JS_EVAL_TYPE_GLOBAL);
   if (ret.is_exception()) {
@@ -152,7 +150,7 @@ bool Host::eval_source(std::string_view code, const char *filename,
   return true;
 }
 
-bool Host::eval_file(const char *path) {
+bool Host::eval_file(const char* path) {
   std::ifstream in(path, std::ios::binary);
   if (!in) {
     spdlog::error("failed to open {}: {}", path, std::strerror(errno));

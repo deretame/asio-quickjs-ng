@@ -1,8 +1,4 @@
 // Dynamic function registry tests: call(name, ...args) from JS.
-#include "function_registry.hpp"
-#include "host.hpp"
-#include "qjs.hpp"
-
 #include <async_simple/coro/Lazy.h>
 #include <gtest/gtest.h>
 
@@ -10,9 +6,13 @@
 #include <stdexcept>
 #include <string>
 
+#include "function_registry.hpp"
+#include "host.hpp"
+#include "qjs.hpp"
+
 namespace {
 
-bool setup_host(Host &host) {
+bool setup_host(Host& host) {
   if (!host) {
     return false;
   }
@@ -24,16 +24,15 @@ std::string js_str(qjs::Value v) {
   return s.value_or("");
 }
 
-} // namespace
+}  // namespace
 
 TEST(FunctionRegistry, SyncCall) {
   Host host;
   ASSERT_TRUE(setup_host(host));
 
   // Trampoline-style: int32_t a, int32_t b -> int32_t.
-  host.register_function("add", [](int32_t a, int32_t b) -> int32_t {
-    return a + b;
-  });
+  host.register_function("add",
+                         [](int32_t a, int32_t b) -> int32_t { return a + b; });
 
   ASSERT_TRUE(host.eval_source(
       R"JS(
@@ -63,7 +62,8 @@ TEST(FunctionRegistry, AsyncCall) {
 
   // Trampoline-style async: Lazy<int32_t>(int32_t, int32_t).
   host.register_async_function(
-      "asyncAdd", [&host](int32_t a, int32_t b) -> async_simple::coro::Lazy<int32_t> {
+      "asyncAdd",
+      [&host](int32_t a, int32_t b) -> async_simple::coro::Lazy<int32_t> {
         co_await host.async_sleep(std::chrono::milliseconds(10));
         co_return a + b;
       });
@@ -100,9 +100,8 @@ TEST(FunctionRegistry, SyncCallThrowsUserError) {
   Host host;
   ASSERT_TRUE(setup_host(host));
 
-  host.register_function("boom", []() -> int32_t {
-    throw std::runtime_error("boom from sync");
-  });
+  host.register_function(
+      "boom", []() -> int32_t { throw std::runtime_error("boom from sync"); });
 
   ASSERT_TRUE(host.eval_source(
       R"JS(
@@ -124,11 +123,11 @@ TEST(FunctionRegistry, AsyncCallRejectsOnException) {
   Host host;
   ASSERT_TRUE(setup_host(host));
 
-  host.register_async_function(
-      "alwaysFail", []() -> async_simple::coro::Lazy<int32_t> {
-        throw std::runtime_error("boom from async");
-        co_return 0;
-      });
+  host.register_async_function("alwaysFail",
+                               []() -> async_simple::coro::Lazy<int32_t> {
+                                 throw std::runtime_error("boom from async");
+                                 co_return 0;
+                               });
 
   ASSERT_TRUE(host.eval_source(
       R"JS(

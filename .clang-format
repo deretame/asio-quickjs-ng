@@ -1,0 +1,7 @@
+# Google C++ style
+BasedOnStyle: Google
+Language: Cpp
+Standard: c++20
+ColumnLimit: 80
+IndentWidth: 2
+UseTab: Never
