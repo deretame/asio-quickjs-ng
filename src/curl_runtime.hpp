@@ -16,24 +16,24 @@ namespace curl_http {
 
 struct CurlWatch;
 struct Transfer;
-class Runtime;
+class Client;
 
-// Forward declarations for runtime-internal C callbacks (defined as friends).
-void on_socket_action(Runtime *runtime, curl_socket_t fd, int ev_bitmask);
+// Forward declarations for client-internal C callbacks (defined as friends).
+void on_socket_action(Client *client, curl_socket_t fd, int ev_bitmask);
 int curl_socket_callback(CURL * /*easy*/, curl_socket_t s, int what,
                          void *userp, void *socketp);
 int curl_timer_callback(CURLM * /*multi*/, long timeout_ms, void *userp);
 
-class Runtime : public std::enable_shared_from_this<Runtime> {
+class Client : public std::enable_shared_from_this<Client> {
 public:
-  explicit Runtime(AsioExecutor &ex);
-  ~Runtime();
+  explicit Client(AsioExecutor &ex);
+  ~Client();
 
-  Runtime(const Runtime &) = delete;
-  Runtime &operator=(const Runtime &) = delete;
+  Client(const Client &) = delete;
+  Client &operator=(const Client &) = delete;
 
   // Add the transfer's easy handle to the multi handle and start driving it.
-  // The transfer's runtime pointer must already be set to this Runtime.
+  // The transfer's client pointer must already be set to this Client.
   bool add_transfer(Transfer *tr);
 
   // Remove the transfer's easy handle from the multi handle (used by Transfer::finish).

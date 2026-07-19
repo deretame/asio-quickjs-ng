@@ -204,11 +204,11 @@ Lazy<FetchResult> async_fetch(Host &host, FetchOptions options, uint64_t id) {
   Promise<FetchResult> p;
   auto fut = p.getFuture();
 
-  auto runtime = std::make_shared<curl_http::Runtime>(host.ex);
-  if (!runtime || !*runtime) {
+  auto curl_client = std::make_shared<curl_http::Client>(host.ex);
+  if (!curl_client || !*curl_client) {
     FetchResult r;
     r.ok = false;
-    r.error = "curl runtime not available";
+    r.error = "curl client not available";
     r.url = options.url;
     co_return std::move(r);
   }
@@ -224,10 +224,10 @@ Lazy<FetchResult> async_fetch(Host &host, FetchOptions options, uint64_t id) {
     host.fetch_transfers[id] = tr;
   }
 
-  if (!runtime->add_transfer(tr)) {
+  if (!curl_client->add_transfer(tr)) {
     FetchResult r;
     r.ok = false;
-    r.error = "curl runtime not available";
+    r.error = "curl client not available";
     r.url = tr->options.url;
     if (id != 0) {
       host.fetch_transfers.erase(id);

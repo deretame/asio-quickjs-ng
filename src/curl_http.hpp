@@ -13,7 +13,7 @@
 
 namespace curl_http {
 
-class Runtime;
+class Client;
 
 struct HeaderPair {
   std::string name;
@@ -144,7 +144,7 @@ private:
 };
 
 struct Transfer {
-  Runtime *runtime = nullptr;
+  Client *client = nullptr;
   Easy easy;
   FetchOptions options;
   std::string body;

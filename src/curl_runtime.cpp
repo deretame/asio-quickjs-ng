@@ -13,19 +13,19 @@ Global g_curl_global;
 } // namespace
 
 struct CurlWatch : std::enable_shared_from_this<CurlWatch> {
-  Runtime *runtime = nullptr;
+  Client *client = nullptr;
   curl_socket_t fd = CURL_SOCKET_BAD;
   asio::ip::tcp::socket sock;
   int action = 0;
   bool read_armed = false;
   bool write_armed = false;
 
-  explicit CurlWatch(Runtime *r, curl_socket_t s)
-      : runtime(r), fd(s), sock(r->ioc_) {}
+  explicit CurlWatch(Client *r, curl_socket_t s)
+      : client(r), fd(s), sock(r->ioc_) {}
 
   bool alive() const {
-    auto it = runtime->watches_.find(fd);
-    return it != runtime->watches_.end() && it->second.get() == this;
+    auto it = client->watches_.find(fd);
+    return it != client->watches_.end() && it->second.get() == this;
   }
 
   void update(int what) {
@@ -41,7 +41,7 @@ struct CurlWatch : std::enable_shared_from_this<CurlWatch> {
   }
 
   void arm() {
-    if (runtime->stopping_) {
+    if (client->stopping_) {
       return;
     }
     arm_dir(CURL_POLL_IN, CURL_CSELECT_IN, read_armed,
@@ -63,11 +63,11 @@ private:
       bool &armed =
           (poll_bit == CURL_POLL_IN) ? self->read_armed : self->write_armed;
       armed = false;
-      if (ec || self->runtime->stopping_) {
+      if (ec || self->client->stopping_) {
         return;
       }
       if (self->action & poll_bit) {
-        self->runtime->on_socket_action(self->fd, ev_bit);
+        self->client->on_socket_action(self->fd, ev_bit);
       }
       if (self->alive()) {
         self->arm();
@@ -78,33 +78,33 @@ private:
 
 int curl_socket_callback(CURL * /*easy*/, curl_socket_t s, int what,
                          void *userp, void *socketp) {
-  auto *runtime = static_cast<Runtime *>(userp);
+  auto *client = static_cast<Client *>(userp);
   auto *old = static_cast<CurlWatch *>(socketp);
 
   if (what == CURL_POLL_REMOVE) {
     if (old) {
       old->dispose();
-      runtime->multi_.assign(s, nullptr);
-      runtime->watches_.erase(s);
+      client->multi_.assign(s, nullptr);
+      client->watches_.erase(s);
     }
     return 0;
   }
 
   std::shared_ptr<CurlWatch> watch;
   if (old) {
-    auto it = runtime->watches_.find(s);
-    if (it == runtime->watches_.end()) {
+    auto it = client->watches_.find(s);
+    if (it == client->watches_.end()) {
       return -1;
     }
     watch = it->second;
   } else {
-    watch = std::make_shared<CurlWatch>(runtime, s);
+    watch = std::make_shared<CurlWatch>(client, s);
     if (!assign_socket(watch->sock, s)) {
       spdlog::error("assign curl socket failed");
       return -1;
     }
-    runtime->watches_[s] = watch;
-    runtime->multi_.assign(s, watch.get());
+    client->watches_[s] = watch;
+    client->multi_.assign(s, watch.get());
   }
 
   watch->update(what);
@@ -112,21 +112,21 @@ int curl_socket_callback(CURL * /*easy*/, curl_socket_t s, int what,
 }
 
 int curl_timer_callback(CURLM * /*multi*/, long timeout_ms, void *userp) {
-  auto *runtime = static_cast<Runtime *>(userp);
-  runtime->arm_timer(timeout_ms);
+  auto *client = static_cast<Client *>(userp);
+  client->arm_timer(timeout_ms);
   return 0;
 }
 
-Runtime::Runtime(AsioExecutor &ex)
+Client::Client(AsioExecutor &ex)
     : ex_(ex), ioc_(*static_cast<asio::io_context *>(ex.checkout())),
       timer_(ioc_) {
   multi_.set_socket_function(curl_socket_callback, this);
   multi_.set_timer_function(curl_timer_callback, this);
 }
 
-Runtime::~Runtime() { shutdown(); }
+Client::~Client() { shutdown(); }
 
-void Runtime::arm_timer(long timeout_ms) {
+void Client::arm_timer(long timeout_ms) {
   timer_.cancel();
   if (timeout_ms < 0 || stopping_) {
     return;
@@ -140,7 +140,7 @@ void Runtime::arm_timer(long timeout_ms) {
   });
 }
 
-void Runtime::on_socket_action(curl_socket_t fd, int ev_bitmask) {
+void Client::on_socket_action(curl_socket_t fd, int ev_bitmask) {
   if (!multi_ || stopping_) {
     return;
   }
@@ -152,7 +152,7 @@ void Runtime::on_socket_action(curl_socket_t fd, int ev_bitmask) {
   on_multi_messages();
 }
 
-void Runtime::on_multi_messages() {
+void Client::on_multi_messages() {
   int msgs = 0;
   while (CURLMsg *msg = multi_.info_read(&msgs)) {
     if (msg->msg != CURLMSG_DONE) {
@@ -172,11 +172,11 @@ void Runtime::on_multi_messages() {
   }
 }
 
-bool Runtime::add_transfer(Transfer *tr) {
+bool Client::add_transfer(Transfer *tr) {
   if (!tr || !tr->easy) {
     return false;
   }
-  tr->runtime = this;
+  tr->client = this;
   if (!tr->start()) {
     return false;
   }
@@ -184,15 +184,15 @@ bool Runtime::add_transfer(Transfer *tr) {
   return true;
 }
 
-void Runtime::remove_transfer(Transfer *tr) {
+void Client::remove_transfer(Transfer *tr) {
   if (tr && tr->easy) {
     multi_.remove(tr->easy.get());
   }
 }
 
-void Runtime::notify() { on_socket_action(CURL_SOCKET_TIMEOUT, 0); }
+void Client::notify() { on_socket_action(CURL_SOCKET_TIMEOUT, 0); }
 
-void Runtime::shutdown() {
+void Client::shutdown() {
   stopping_ = true;
   timer_.cancel();
   for (auto &kv : watches_) {
@@ -201,7 +201,7 @@ void Runtime::shutdown() {
   watches_.clear();
 }
 
-// Transfer method implementations (moved here because they need Runtime).
+// Transfer method implementations (moved here because they need Client).
 
 size_t Transfer::write_cb(char *ptr, size_t size, size_t nmemb, void *userdata) {
   auto *self = static_cast<Transfer *>(userdata);
@@ -252,9 +252,9 @@ void Transfer::finish(FetchResult result) {
   }
   finished = true;
   auto done = std::move(complete);
-  if (easy && runtime) {
+  if (easy && client) {
     easy.setopt(CURLOPT_PRIVATE, nullptr);
-    runtime->remove_transfer(this);
+    client->remove_transfer(this);
     easy.reset();
   }
   if (req_headers) {
@@ -276,7 +276,7 @@ void Transfer::abort() {
 }
 
 bool Transfer::start() {
-  if (!easy || !runtime) {
+  if (!easy || !client) {
     return false;
   }
   easy.setopt(CURLOPT_URL, options.url.c_str());
@@ -327,7 +327,7 @@ bool Transfer::start() {
     easy.setopt(CURLOPT_HTTPHEADER, req_headers);
   }
 
-  return runtime->multi_.add(easy.get()) == CURLM_OK;
+  return client->multi_.add(easy.get()) == CURLM_OK;
 }
 
 FetchResult Transfer::make_result(CURLcode code) {
