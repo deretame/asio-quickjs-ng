@@ -13,7 +13,8 @@
 Current implemented features:
 
 - `setTimeout`, `print`, `console.*` (in `src/host.cpp`).
-- `fetch` / `Request` / `Response` / `Headers` / `AbortController` (polyfills in `src/js/*.js`; C++ transport in `src/fetch.cpp` and `src/curl_http.hpp`).
+- `fetch` / `Request` / `Response` / `Headers` / `AbortController` (polyfills in `src/js/*.js`; C++ transport in `src/fetch.cpp`, `src/curl_http.hpp`, and `src/curl_runtime.cpp`).
+- Per-request `curl_http::Runtime` created inside `fetch_api::async_fetch` and discarded after the request completes.
 - `data:` and `about:` scheme handling in JS.
 - C++20 coroutine channels (`mpsc`, `oneshot`) in `src/channel.hpp`.
 - WPT-style fetch test runner for official Web Platform Tests.
@@ -52,7 +53,7 @@ asio-quickjs-ng/
 ├── demo.js                 # Simple JS demo: timer + fetch
 ├── src/
 │   ├── host.hpp/.cpp       # Runtime: io_context, QuickJS, pending-op counter, and main loop
-│   ├── curl_runtime.hpp/.cpp # libcurl multi-handle driver: socket/timer watches, per-request Transfer lifecycle
+│   ├── curl_runtime.hpp/.cpp # libcurl multi-handle driver: socket/timer watches (per-request lifetime)
 │   ├── fetch.hpp/.cpp      # __nativeFetch, async_fetch, embedded JS bootstrap
 │   ├── function_registry.hpp/.cpp # Dynamic call(name, ...args) registry
 │   ├── curl_http.hpp       # libcurl Global/Easy/Multi/Transfer wrappers
@@ -202,10 +203,10 @@ The runner starts `tests/wpt/node_test_server.mjs` as a network fixture, reads `
 
 ### Key abstractions
 
-- **`Host`** (`src/host.hpp`): owns `io_context`, QuickJS `Runtime`/`Context`, pending-op counter, and the main loop. Holds a `std::shared_ptr<curl_http::Runtime>` for outbound HTTP (created by `bind_curl()` or injected via `set_curl_runtime()`). Provides `spawn_lazy`, `block_on`, `eval_source`, `eval_file`, and `async_sleep`.
+- **`Host`** (`src/host.hpp`): owns `io_context`, QuickJS `Runtime`/`Context`, pending-op counter, and the main loop. Knows nothing about libcurl directly; it only keeps `next_fetch_id` and a map of in-flight `curl_http::Transfer*` pointers so that JS can abort a request by id. Provides `spawn_lazy`, `block_on`, `eval_source`, `eval_file`, and `async_sleep`.
 - **`qjs::Value` / `qjs::Context`** (`src/qjs.hpp`): RAII wrappers and rquickjs-like binding helpers (`g.fn<&fn>("name")`, `g.obj("console", ...)`). Supports injecting `Host*` via context opaque.
-- **`curl_http::Runtime`** (`src/curl_runtime.hpp/.cpp`): owns one `curl_multi` handle, asio socket watches, and the timeout timer. Drives all transfers for the `io_context` it is constructed with. Can be shared by multiple `Host` instances, but each `Host` keeps its own in-flight transfer map for abort handling.
-- **`curl_http::Transfer`** (`src/curl_http.hpp`): represents one outbound HTTP request. Created per fetch call, added to a `Runtime`, and deleted either by the Runtime's completion callback or by the JS abort path.
+- **`curl_http::Runtime`** (`src/curl_runtime.hpp/.cpp`): owns one `curl_multi` handle, asio socket watches, and the timeout timer. A new `Runtime` is constructed for each fetch request, passed the `Host`'s `AsioExecutor`, and destroyed once the request finishes.
+- **`curl_http::Transfer`** (`src/curl_http.hpp`): represents one outbound HTTP request. Created per fetch call, added to its per-request `Runtime`, and deleted either by the Runtime's completion callback or by the JS abort path.
 - **`fetch_api`** (`src/fetch.hpp`): `async_fetch` (C++ coroutine) and `native_fetch_fn` / `native_fetch_abort_fn` (JS-facing C functions).
 - **Channels** (`src/channel.hpp`): `co::mpsc::unbounded<T>()` and `co::oneshot::channel<T>()` for coroutine-to-coroutine communication.
 
@@ -273,7 +274,7 @@ If you edit a `.js` file, you must rebuild for the `#embed` to pick up the new b
 - **`#embed` caching**: editing `src/js/*.js` requires a rebuild to update the embedded bytes.
 - **WPT runner timing**: `eval_source(..., false)` is used when loading bootstrap/testharness scripts so the harness does not complete prematurely; do not `drain_jobs()` between loading harness and test files.
 - **Abort path ownership**: `Transfer` is deleted by `curl_http::Runtime::on_multi_messages` after `finish()`. The JS abort path must erase the transfer from `Host::fetch_transfers` before deleting it to avoid double-free.
-- **Shared `Runtime`**: a `curl_http::Runtime` can be shared across multiple `Host` instances because it only depends on an `AsioExecutor`. Each `Host` still keeps its own `next_fetch_id`/`fetch_transfers` so abort IDs do not collide.
+- **Per-request Runtime**: `fetch_api::async_fetch` constructs a fresh `curl_http::Runtime` for each call. This keeps `Host` curl-free but is less efficient than a shared multi-handle; it is acceptable for the current workload.
 - **Single-threaded assumption**: `Host`, `Runtime`, and their `io_context` are not thread-safe. JS and all I/O callbacks run on the same thread.
 - **Pending ops**: async operations (timers, fetches) increment `pending_ops`. The event loop exits when `pending_ops == 0` and no JS jobs are pending. If a callback forgets to decrement, the loop will hang.
 

@@ -94,24 +94,7 @@ void Host::register_async_function(const std::string &name,
   registry.register_async_function(name, std::move(fn));
 }
 
-void Host::bind_curl() {
-  if (!curl_runtime) {
-    curl_runtime = std::make_shared<curl_http::Runtime>(ex);
-  }
-}
-
-void Host::shutdown() {
-  stopping = true;
-  if (curl_runtime) {
-    curl_runtime->shutdown();
-  }
-}
-
-void Host::notify_curl() {
-  if (curl_runtime) {
-    curl_runtime->notify();
-  }
-}
+void Host::shutdown() { stopping = true; }
 
 void Host::throw_type_error(const char *msg) {
   JS_ThrowTypeError(ctx.get(), "%s", msg);

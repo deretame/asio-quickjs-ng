@@ -8,6 +8,10 @@
 
 namespace curl_http {
 
+namespace {
+Global g_curl_global;
+} // namespace
+
 struct CurlWatch : std::enable_shared_from_this<CurlWatch> {
   Runtime *runtime = nullptr;
   curl_socket_t fd = CURL_SOCKET_BAD;

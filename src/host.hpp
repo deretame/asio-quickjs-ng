@@ -1,7 +1,6 @@
 #pragma once
 
 #include "asio_executor.hpp"
-#include "curl_runtime.hpp"
 #include "function_registry.hpp"
 #include "qjs.hpp"
 
@@ -31,7 +30,6 @@ struct Host {
   AsioExecutor ex{ioc};
   qjs::Runtime rt;
   qjs::Context ctx{rt};
-  std::shared_ptr<curl_http::Runtime> curl_runtime;
   int pending_ops = 0;
   bool stopping = false;
 
@@ -54,16 +52,9 @@ struct Host {
 
   explicit operator bool() const { return rt && ctx; }
 
-  void set_curl_runtime(std::shared_ptr<curl_http::Runtime> rt) {
-    curl_runtime = std::move(rt);
-  }
-  curl_http::Runtime *curl_runtime_ptr() const { return curl_runtime.get(); }
-
-  void bind_curl();
   void shutdown();
   void run_loop();
   void drain_jobs() { rt.drain_jobs(); }
-  void notify_curl();
 
   qjs::Value global() { return ctx.global(); }
   qjs::Ctx js() { return ctx.ref(); }
@@ -126,7 +117,6 @@ struct Host {
           }
           --pending_ops;
         });
-    notify_curl();
     run_loop();
     if (ep) {
       std::rethrow_exception(ep);
@@ -143,7 +133,6 @@ struct Host {
       }
       --pending_ops;
     });
-    notify_curl();
     run_loop();
     if (ep) {
       std::rethrow_exception(ep);

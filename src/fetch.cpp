@@ -204,6 +204,15 @@ Lazy<FetchResult> async_fetch(Host &host, FetchOptions options, uint64_t id) {
   Promise<FetchResult> p;
   auto fut = p.getFuture();
 
+  auto runtime = std::make_shared<curl_http::Runtime>(host.ex);
+  if (!runtime || !*runtime) {
+    FetchResult r;
+    r.ok = false;
+    r.error = "curl runtime not available";
+    r.url = options.url;
+    co_return std::move(r);
+  }
+
   auto *tr = new Transfer();
   tr->options = std::move(options);
   tr->id = id;
@@ -215,8 +224,7 @@ Lazy<FetchResult> async_fetch(Host &host, FetchOptions options, uint64_t id) {
     host.fetch_transfers[id] = tr;
   }
 
-  auto *runtime = host.curl_runtime_ptr();
-  if (!runtime || !runtime->add_transfer(tr)) {
+  if (!runtime->add_transfer(tr)) {
     FetchResult r;
     r.ok = false;
     r.error = "curl runtime not available";
@@ -226,7 +234,7 @@ Lazy<FetchResult> async_fetch(Host &host, FetchOptions options, uint64_t id) {
     }
     tr->finish(std::move(r));
     delete tr;
-    co_return co_await std::move(fut);
+    co_return std::move(r);
   }
 
   auto result = co_await std::move(fut);
@@ -234,10 +242,6 @@ Lazy<FetchResult> async_fetch(Host &host, FetchOptions options, uint64_t id) {
 }
 
 qjs::Value native_fetch_fn(Host *host, qjs::Value opts) {
-  if (!host->curl_runtime_ptr()) {
-    host->throw_internal_error("curl runtime missing");
-  }
-
   FetchOptions options = parse_options(host->js_raw(), opts.raw());
   const uint64_t id = host->next_fetch_id++;
 

@@ -15,14 +15,11 @@ int main(int argc, char **argv) {
     script = argv[1];
   }
 
-  curl_http::Global curl_global;
-
   Host host;
   if (!host) {
     spdlog::error("init failed");
     return 1;
   }
-  host.bind_curl();
   if (!host.install_runtime()) {
     spdlog::error("install_runtime failed");
     return 1;

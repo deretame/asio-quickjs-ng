@@ -13,11 +13,7 @@
 namespace {
 
 bool setup_host(Host &host) {
-  if (!host) {
-    return false;
-  }
-  host.bind_curl();
-  return host.install_runtime() && fetch_api::install(host);
+  return host && host.install_runtime() && fetch_api::install(host);
 }
 
 bool js_truthy(Host &host, qjs::Value v) {
@@ -84,7 +80,6 @@ protected:
 
   HttpTestServer server_;
   Host host_;
-  curl_http::Global curl_global_;
   std::string origin_;
 };
 
@@ -164,7 +159,6 @@ TEST_F(FetchLocal, DataAndAboutSchemes) {
 }
 
 TEST(FetchCpp, AsyncOptionsPost) {
-  curl_http::Global g;
   HttpTestServer server;
   server.start();
   Host host;

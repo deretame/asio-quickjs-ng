@@ -554,17 +554,12 @@ protected:
   void TearDown() override { node_.stop(); }
 
   bool setup_host(Host &host) {
-    if (!host) {
-      return false;
-    }
-    host.bind_curl();
-    return host.install_runtime() && fetch_api::install(host);
+    return host && host.install_runtime() && fetch_api::install(host);
   }
 
   fs::path wpt_;
   fs::path repo_;
   NodeFixtureServer node_;
-  curl_http::Global curl_global_;
 };
 
 TEST_F(WptFetch, OfficialManifest) {
