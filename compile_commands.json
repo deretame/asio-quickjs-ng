@@ -1,8 +1,0 @@
-[
-{
-  "directory": "D:/data/project/cpp/asio-quickjs-ng/build/app",
-  "command": "D:\\msys2\\ucrt64\\bin\\g++.exe -DASIO_NO_DEPRECATED -DASIO_STANDALONE -DCURL_STATICLIB -D_WIN32_WINNT=0x0A00 -ID:/data/project/cpp/asio-quickjs-ng/asio/include -ID:/data/project/cpp/asio-quickjs-ng/quickjs-ng -ID:/data/project/cpp/asio-quickjs-ng/curl/include -O3 -DNDEBUG -std=c++20 -Wall -Wextra -fcoroutines -o CMakeFiles\\asio_qjs.dir\\src\\main.cpp.obj -c D:\\data\\project\\cpp\\asio-quickjs-ng\\src\\main.cpp",
-  "file": "D:/data/project/cpp/asio-quickjs-ng/src/main.cpp",
-  "output": "D:/data/project/cpp/asio-quickjs-ng/build/app/CMakeFiles/asio_qjs.dir/src/main.cpp.obj"
-}
-]
