@@ -182,7 +182,7 @@ private:
           asio::async_read(
               c->sock, c->buf, asio::transfer_exactly(need),
               [c, content_length, finish](const asio::error_code &ec2,
-                                          std::size_t) {
+                                          std::size_t) mutable {
                 if (ec2) {
                   return;
                 }
