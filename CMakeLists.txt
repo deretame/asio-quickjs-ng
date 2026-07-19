@@ -130,6 +130,7 @@ target_compile_definitions(async_simple_headers INTERFACE ASYNC_SIMPLE_HAS_NOT_A
 
 # --- core library (host + fetch layers) ---
 add_library(asio_qjs_core
+  src/curl_runtime.cpp
   src/host.cpp
   src/fetch.cpp
   src/function_registry.cpp

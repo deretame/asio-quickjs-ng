@@ -14,163 +14,6 @@
 
 namespace {
 
-void on_socket_action(Host *host, curl_socket_t fd, int ev_bitmask);
-void on_multi_messages(Host *host);
-
-} // namespace
-
-struct CurlWatch : std::enable_shared_from_this<CurlWatch> {
-  Host *host = nullptr;
-  curl_socket_t fd = CURL_SOCKET_BAD;
-  asio::ip::tcp::socket sock;
-  int action = 0;
-  bool read_armed = false;
-  bool write_armed = false;
-
-  explicit CurlWatch(Host *h, curl_socket_t s)
-      : host(h), fd(s), sock(h->ioc) {}
-
-  bool alive() const {
-    auto it = host->watches.find(fd);
-    return it != host->watches.end() && it->second.get() == this;
-  }
-
-  void update(int what) {
-    action = what;
-    arm();
-  }
-
-  void dispose() {
-    asio::error_code ec;
-    action = 0;
-    sock.cancel();
-    sock.release(ec);
-  }
-
-  void arm() {
-    if (host->stopping) {
-      return;
-    }
-    arm_dir(CURL_POLL_IN, CURL_CSELECT_IN, read_armed,
-            asio::ip::tcp::socket::wait_read);
-    arm_dir(CURL_POLL_OUT, CURL_CSELECT_OUT, write_armed,
-            asio::ip::tcp::socket::wait_write);
-  }
-
-private:
-  void arm_dir(int poll_bit, int ev_bit, bool & /*armed*/,
-               asio::ip::tcp::socket::wait_type wait) {
-    bool &flag = (poll_bit == CURL_POLL_IN) ? read_armed : write_armed;
-    if (!(action & poll_bit) || flag) {
-      return;
-    }
-    flag = true;
-    auto self = shared_from_this();
-    sock.async_wait(wait, [self, poll_bit, ev_bit](const asio::error_code &ec) {
-      bool &armed =
-          (poll_bit == CURL_POLL_IN) ? self->read_armed : self->write_armed;
-      armed = false;
-      if (ec || self->host->stopping) {
-        return;
-      }
-      if (self->action & poll_bit) {
-        on_socket_action(self->host, self->fd, ev_bit);
-      }
-      if (self->alive()) {
-        self->arm();
-      }
-    });
-  }
-};
-
-namespace {
-
-void on_socket_action(Host *host, curl_socket_t fd, int ev_bitmask) {
-  if (!host->multi || host->stopping) {
-    return;
-  }
-  int running = 0;
-  CURLMcode mc = host->multi.socket_action(fd, ev_bitmask, &running);
-  if (mc != CURLM_OK) {
-    spdlog::error("curl_multi_socket_action: {}", curl_multi_strerror(mc));
-  }
-  on_multi_messages(host);
-}
-
-int curl_socket_cb(CURL * /*easy*/, curl_socket_t s, int what, void *userp,
-                   void *socketp) {
-  auto *host = static_cast<Host *>(userp);
-  auto *old = static_cast<CurlWatch *>(socketp);
-
-  if (what == CURL_POLL_REMOVE) {
-    if (old) {
-      old->dispose();
-      host->multi.assign(s, nullptr);
-      host->watches.erase(s);
-    }
-    return 0;
-  }
-
-  std::shared_ptr<CurlWatch> watch;
-  if (old) {
-    auto it = host->watches.find(s);
-    if (it == host->watches.end()) {
-      return -1;
-    }
-    watch = it->second;
-  } else {
-    watch = std::make_shared<CurlWatch>(host, s);
-    if (!curl_http::assign_socket(watch->sock, s)) {
-      spdlog::error("assign curl socket failed");
-      return -1;
-    }
-    host->watches[s] = watch;
-    host->multi.assign(s, watch.get());
-  }
-
-  watch->update(what);
-  return 0;
-}
-
-int curl_timer_cb(CURLM * /*multi*/, long timeout_ms, void *userp) {
-  auto *host = static_cast<Host *>(userp);
-  host->multi_timer.cancel();
-  if (timeout_ms < 0 || host->stopping) {
-    return 0;
-  }
-  host->multi_timer.expires_after(std::chrono::milliseconds(timeout_ms));
-  host->multi_timer.async_wait([host](const asio::error_code &err) {
-    if (err || host->stopping) {
-      return;
-    }
-    on_socket_action(host, CURL_SOCKET_TIMEOUT, 0);
-  });
-  return 0;
-}
-
-void on_multi_messages(Host *host) {
-  int msgs = 0;
-  while (CURLMsg *msg = host->multi.info_read(&msgs)) {
-    if (msg->msg != CURLMSG_DONE) {
-      continue;
-    }
-    char *private_ptr = nullptr;
-    curl_easy_getinfo(msg->easy_handle, CURLINFO_PRIVATE, &private_ptr);
-    auto *tr = reinterpret_cast<curl_http::Transfer *>(private_ptr);
-    if (!tr) {
-      continue;
-    }
-    if (tr->id != 0) {
-      host->fetch_transfers.erase(tr->id);
-    }
-    if (!tr->finished) {
-      auto result = tr->make_result(msg->data.result);
-      tr->finish(std::move(result));
-    }
-    delete tr;
-  }
-}
-
 std::string join_args(qjs::Args args) {
   std::string out;
   for (int i = 0; i < args.size(); ++i) {
@@ -252,20 +95,23 @@ void Host::register_async_function(const std::string &name,
 }
 
 void Host::bind_curl() {
-  multi.set_socket_function(curl_socket_cb, this);
-  multi.set_timer_function(curl_timer_cb, this);
+  if (!curl_runtime) {
+    curl_runtime = std::make_shared<curl_http::Runtime>(ex);
+  }
 }
 
 void Host::shutdown() {
   stopping = true;
-  multi_timer.cancel();
-  for (auto &kv : watches) {
-    kv.second->dispose();
+  if (curl_runtime) {
+    curl_runtime->shutdown();
   }
-  watches.clear();
 }
 
-void Host::notify_curl() { on_socket_action(this, CURL_SOCKET_TIMEOUT, 0); }
+void Host::notify_curl() {
+  if (curl_runtime) {
+    curl_runtime->notify();
+  }
+}
 
 void Host::throw_type_error(const char *msg) {
   JS_ThrowTypeError(ctx.get(), "%s", msg);

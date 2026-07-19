@@ -13,6 +13,8 @@
 
 namespace curl_http {
 
+class Runtime;
+
 struct HeaderPair {
   std::string name;
   std::string value;
@@ -142,7 +144,7 @@ private:
 };
 
 struct Transfer {
-  Multi *multi = nullptr;
+  Runtime *runtime = nullptr;
   Easy easy;
   FetchOptions options;
   std::string body;
@@ -161,161 +163,13 @@ struct Transfer {
     }
   }
 
-  static size_t write_cb(char *ptr, size_t size, size_t nmemb, void *userdata) {
-    auto *self = static_cast<Transfer *>(userdata);
-    self->body.append(ptr, size * nmemb);
-    return size * nmemb;
-  }
+  static size_t write_cb(char *ptr, size_t size, size_t nmemb, void *userdata);
+  static size_t header_cb(char *ptr, size_t size, size_t nmemb, void *userdata);
 
-  static size_t header_cb(char *ptr, size_t size, size_t nmemb, void *userdata) {
-    auto *self = static_cast<Transfer *>(userdata);
-    const size_t n = size * nmemb;
-    std::string line(ptr, n);
-    while (!line.empty() && (line.back() == '\n' || line.back() == '\r')) {
-      line.pop_back();
-    }
-    if (line.empty()) {
-      return n;
-    }
-    if (line.rfind("HTTP/", 0) == 0) {
-      self->response_headers.clear();
-      self->status_text.clear();
-      // HTTP/1.1 200 OK
-      auto sp1 = line.find(' ');
-      if (sp1 != std::string::npos) {
-        auto sp2 = line.find(' ', sp1 + 1);
-        if (sp2 != std::string::npos && sp2 + 1 < line.size()) {
-          self->status_text = line.substr(sp2 + 1);
-        }
-      }
-      return n;
-    }
-    auto colon = line.find(':');
-    if (colon == std::string::npos) {
-      return n;
-    }
-    HeaderPair hp;
-    hp.name = line.substr(0, colon);
-    hp.value = line.substr(colon + 1);
-    while (!hp.value.empty() && (hp.value.front() == ' ' || hp.value.front() == '\t')) {
-      hp.value.erase(hp.value.begin());
-    }
-    self->response_headers.push_back(std::move(hp));
-    return n;
-  }
-
-  void finish(FetchResult result) {
-    if (finished) {
-      return;
-    }
-    finished = true;
-    auto done = std::move(complete);
-    if (easy && multi) {
-      easy.setopt(CURLOPT_PRIVATE, nullptr);
-      multi->remove(easy.get());
-      easy.reset();
-    }
-    if (req_headers) {
-      curl_slist_free_all(req_headers);
-      req_headers = nullptr;
-    }
-    if (done) {
-      done(std::move(result));
-    }
-  }
-
-  void abort() {
-    FetchResult r;
-    r.ok = false;
-    r.aborted = true;
-    r.error = "aborted";
-    r.url = options.url;
-    finish(std::move(r));
-  }
-
-  bool start() {
-    if (!easy) {
-      return false;
-    }
-    easy.setopt(CURLOPT_URL, options.url.c_str());
-    easy.setopt(CURLOPT_FOLLOWLOCATION, options.follow_redirects ? 1L : 0L);
-    easy.setopt(CURLOPT_MAXREDIRS, 20L);
-    easy.setopt(CURLOPT_WRITEFUNCTION, &Transfer::write_cb);
-    easy.setopt(CURLOPT_WRITEDATA, this);
-    easy.setopt(CURLOPT_HEADERFUNCTION, &Transfer::header_cb);
-    easy.setopt(CURLOPT_HEADERDATA, this);
-    easy.setopt(CURLOPT_PRIVATE, this);
-    easy.setopt(CURLOPT_ERRORBUFFER, errbuf);
-    easy.setopt(CURLOPT_USERAGENT, "asio-quickjs-ng/0.1");
-    easy.setopt(CURLOPT_ACCEPT_ENCODING, "");
-    easy.setopt(CURLOPT_TIMEOUT, options.timeout_sec);
-#ifdef CURLSSLOPT_NATIVE_CA
-    easy.setopt(CURLOPT_SSL_OPTIONS, static_cast<long>(CURLSSLOPT_NATIVE_CA));
-#endif
-
-    const std::string method = options.method.empty() ? "GET" : options.method;
-    if (method == "GET") {
-      easy.setopt(CURLOPT_HTTPGET, 1L);
-    } else if (method == "HEAD") {
-      easy.setopt(CURLOPT_NOBODY, 1L);
-    } else if (method == "POST") {
-      easy.setopt(CURLOPT_POST, 1L);
-      easy.setopt(CURLOPT_POSTFIELDS, options.body.c_str());
-      easy.setopt(CURLOPT_POSTFIELDSIZE_LARGE,
-                  static_cast<curl_off_t>(options.body.size()));
-    } else if (method == "PUT") {
-      easy.setopt(CURLOPT_CUSTOMREQUEST, "PUT");
-      easy.setopt(CURLOPT_POSTFIELDS, options.body.c_str());
-      easy.setopt(CURLOPT_POSTFIELDSIZE_LARGE,
-                  static_cast<curl_off_t>(options.body.size()));
-    } else {
-      easy.setopt(CURLOPT_CUSTOMREQUEST, method.c_str());
-      if (!options.body.empty()) {
-        easy.setopt(CURLOPT_POSTFIELDS, options.body.c_str());
-        easy.setopt(CURLOPT_POSTFIELDSIZE_LARGE,
-                    static_cast<curl_off_t>(options.body.size()));
-      }
-    }
-
-    for (const auto &h : options.headers) {
-      std::string line = h.name + ": " + h.value;
-      req_headers = curl_slist_append(req_headers, line.c_str());
-    }
-    if (req_headers) {
-      easy.setopt(CURLOPT_HTTPHEADER, req_headers);
-    }
-
-    return multi->add(easy.get()) == CURLM_OK;
-  }
-
-  FetchResult make_result(CURLcode code) {
-    FetchResult r;
-    r.url = options.url;
-    char *effective = nullptr;
-    if (easy.getinfo(CURLINFO_EFFECTIVE_URL, &effective) && effective) {
-      r.url = effective;
-    }
-    easy.getinfo(CURLINFO_RESPONSE_CODE, &r.status);
-    long redirect_count = 0;
-    easy.getinfo(CURLINFO_REDIRECT_COUNT, &redirect_count);
-    r.redirected = redirect_count > 0;
-    r.status_text = status_text;
-    r.headers = std::move(response_headers);
-    if (code == CURLE_OK) {
-      if (options.fail_on_redirect && r.status >= 300 && r.status < 400) {
-        r.ok = false;
-        r.error = "redirect not allowed";
-        r.body = std::move(body);
-      } else {
-        r.ok = true;
-        r.body = std::move(body);
-      }
-    } else {
-      r.ok = false;
-      r.error = errbuf[0] ? errbuf : curl_easy_strerror(code);
-    }
-    return r;
-  }
+  void finish(FetchResult result);
+  void abort();
+  bool start();
+  FetchResult make_result(CURLcode code);
 };
 
 inline bool assign_socket(asio::ip::tcp::socket &sock, curl_socket_t s) {

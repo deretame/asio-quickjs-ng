@@ -1,7 +1,7 @@
 #pragma once
 
 #include "asio_executor.hpp"
-#include "curl_http.hpp"
+#include "curl_runtime.hpp"
 #include "function_registry.hpp"
 #include "qjs.hpp"
 
@@ -22,8 +22,6 @@
 #include <unordered_map>
 #include <utility>
 
-struct CurlWatch;
-
 namespace curl_http {
 struct Transfer;
 }
@@ -33,9 +31,7 @@ struct Host {
   AsioExecutor ex{ioc};
   qjs::Runtime rt;
   qjs::Context ctx{rt};
-  curl_http::Multi multi;
-  asio::steady_timer multi_timer{ioc};
-  std::unordered_map<curl_socket_t, std::shared_ptr<CurlWatch>> watches;
+  std::shared_ptr<curl_http::Runtime> curl_runtime;
   int pending_ops = 0;
   bool stopping = false;
 
@@ -56,7 +52,12 @@ struct Host {
   Host(const Host &) = delete;
   Host &operator=(const Host &) = delete;
 
-  explicit operator bool() const { return rt && ctx && multi; }
+  explicit operator bool() const { return rt && ctx; }
+
+  void set_curl_runtime(std::shared_ptr<curl_http::Runtime> rt) {
+    curl_runtime = std::move(rt);
+  }
+  curl_http::Runtime *curl_runtime_ptr() const { return curl_runtime.get(); }
 
   void bind_curl();
   void shutdown();

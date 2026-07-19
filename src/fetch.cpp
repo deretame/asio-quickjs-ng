@@ -1,4 +1,5 @@
 #include "fetch.hpp"
+#include "curl_runtime.hpp"
 
 #include <async_simple/Promise.h>
 #include <async_simple/coro/FutureAwaiter.h>
@@ -199,12 +200,11 @@ bool install_bootstrap_js(Host& host) {
 
 namespace fetch_api {
 
-Lazy<FetchResult> async_fetch(Host& host, FetchOptions options, uint64_t id) {
+Lazy<FetchResult> async_fetch(Host &host, FetchOptions options, uint64_t id) {
   Promise<FetchResult> p;
   auto fut = p.getFuture();
 
-  auto* tr = new Transfer();
-  tr->multi = &host.multi;
+  auto *tr = new Transfer();
   tr->options = std::move(options);
   tr->id = id;
   tr->complete = [p = std::move(p)](FetchResult result) mutable {
@@ -215,10 +215,11 @@ Lazy<FetchResult> async_fetch(Host& host, FetchOptions options, uint64_t id) {
     host.fetch_transfers[id] = tr;
   }
 
-  if (!tr->easy) {
+  auto *runtime = host.curl_runtime_ptr();
+  if (!runtime || !runtime->add_transfer(tr)) {
     FetchResult r;
     r.ok = false;
-    r.error = "curl_easy_init failed";
+    r.error = "curl runtime not available";
     r.url = tr->options.url;
     if (id != 0) {
       host.fetch_transfers.erase(id);
@@ -228,31 +229,13 @@ Lazy<FetchResult> async_fetch(Host& host, FetchOptions options, uint64_t id) {
     co_return co_await std::move(fut);
   }
 
-  if (!tr->start()) {
-    FetchResult r;
-    r.ok = false;
-    r.error = "curl_multi_add_handle failed";
-    r.url = tr->options.url;
-    if (id != 0) {
-      host.fetch_transfers.erase(id);
-    }
-    tr->finish(std::move(r));
-    delete tr;
-    co_return co_await std::move(fut);
-  }
-
-  host.notify_curl();
   auto result = co_await std::move(fut);
-  // Transfer is deleted in on_multi_messages after finish — but abort path
-  // also finish(). Ownership: finish does not delete; messages path deletes.
-  // For abort we must delete after complete callback.
-  // Keep ownership: delete after await if still in map cleared.
   co_return result;
 }
 
-qjs::Value native_fetch_fn(Host* host, qjs::Value opts) {
-  if (!host->multi) {
-    host->throw_internal_error("curl multi missing");
+qjs::Value native_fetch_fn(Host *host, qjs::Value opts) {
+  if (!host->curl_runtime_ptr()) {
+    host->throw_internal_error("curl runtime missing");
   }
 
   FetchOptions options = parse_options(host->js_raw(), opts.raw());
