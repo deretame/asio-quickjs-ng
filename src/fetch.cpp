@@ -20,6 +20,12 @@ using curl_http::Transfer;
 constexpr unsigned char kJsAbortBytes[] = {
 #embed "js/abort.js"
 };
+constexpr unsigned char kJsTextEncodingPolyfillBytes[] = {
+#embed "js/text-encoding-polyfill.js"
+};
+constexpr unsigned char kJsWhatwgUrlPolyfillBytes[] = {
+#embed "js/whatwg-url-polyfill.js"
+};
 constexpr unsigned char kJsBodyPolyfillBytes[] = {
 #embed "js/body_polyfill.js"
 };
@@ -44,6 +50,8 @@ struct EmbeddedJs {
 
 constexpr EmbeddedJs kBootstrapJs[] = {
     {"js/abort.js", kJsAbortBytes, sizeof(kJsAbortBytes)},
+    {"js/text-encoding-polyfill.js", kJsTextEncodingPolyfillBytes, sizeof(kJsTextEncodingPolyfillBytes)},
+    {"js/whatwg-url-polyfill.js", kJsWhatwgUrlPolyfillBytes, sizeof(kJsWhatwgUrlPolyfillBytes)},
     {"js/body_polyfill.js", kJsBodyPolyfillBytes, sizeof(kJsBodyPolyfillBytes)},
     {"js/headers.js", kJsHeadersBytes, sizeof(kJsHeadersBytes)},
     {"js/request.js", kJsRequestBytes, sizeof(kJsRequestBytes)},

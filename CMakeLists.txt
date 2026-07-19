@@ -157,7 +157,7 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
 endif()
 set_source_files_properties(src/fetch.cpp PROPERTIES
   OBJECT_DEPENDS
-    "${CMAKE_SOURCE_DIR}/src/js/abort.js;${CMAKE_SOURCE_DIR}/src/js/body_polyfill.js;${CMAKE_SOURCE_DIR}/src/js/headers.js;${CMAKE_SOURCE_DIR}/src/js/request.js;${CMAKE_SOURCE_DIR}/src/js/response.js;${CMAKE_SOURCE_DIR}/src/js/fetch.js"
+    "${CMAKE_SOURCE_DIR}/src/js/abort.js;${CMAKE_SOURCE_DIR}/src/js/text-encoding-polyfill.js;${CMAKE_SOURCE_DIR}/src/js/whatwg-url-polyfill.js;${CMAKE_SOURCE_DIR}/src/js/body_polyfill.js;${CMAKE_SOURCE_DIR}/src/js/headers.js;${CMAKE_SOURCE_DIR}/src/js/request.js;${CMAKE_SOURCE_DIR}/src/js/response.js;${CMAKE_SOURCE_DIR}/src/js/fetch.js"
 )
 
 add_executable(asio_qjs src/main.cpp)
