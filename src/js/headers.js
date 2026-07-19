@@ -50,31 +50,13 @@
   };
 
   function isForbiddenRequestHeader(name) {
-    var n = String(name).toLowerCase();
-    if (FORBIDDEN_REQUEST_HEADERS[n]) {
-      return true;
-    }
-    if (n.indexOf('proxy-') === 0 || n.indexOf('sec-') === 0) {
-      return true;
-    }
+    // Non-browser runtime: allow all request headers to be set from JS.
     return false;
   }
 
   function isNoCorsSafelistedRequestHeader(name, value) {
-    var n = String(name).toLowerCase();
-    var v = String(value);
-    if (n === 'accept' || n === 'accept-language' || n === 'content-language') {
-      return true;
-    }
-    if (n === 'content-type') {
-      var mime = v.split(';')[0].trim().toLowerCase();
-      return (
-        mime === 'application/x-www-form-urlencoded' ||
-        mime === 'multipart/form-data' ||
-        mime === 'text/plain'
-      );
-    }
-    return false;
+    // Non-browser runtime: no-cors guard does not restrict headers either.
+    return true;
   }
 
   class Headers {
