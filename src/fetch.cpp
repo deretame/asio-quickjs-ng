@@ -196,8 +196,9 @@ Lazy<void> native_fetch_coro(
 bool install_bootstrap_js(Host& host)
 {
   for (const EmbeddedJs& script : kBootstrapJs) {
-    std::string_view src{reinterpret_cast<const char*>(script.bytes),
-                         script.size};
+    // Copy to std::string so the source is null-terminated; QuickJS may rely
+    // on it even though JS_Eval takes an explicit length.
+    std::string src{reinterpret_cast<const char*>(script.bytes), script.size};
     qjs::Value ret = host.ctx.eval(src, script.name, JS_EVAL_TYPE_GLOBAL);
     if (ret.is_exception()) {
       spdlog::error("bootstrap failed: {}", script.name);

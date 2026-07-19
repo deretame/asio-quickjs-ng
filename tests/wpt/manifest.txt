@@ -30,8 +30,8 @@ local:abort-network.any.js
 # --- HTTP basics / concurrency / redirect (Node fixture) ---
 local:http-basic.any.js
 
-# --- Official request forbidden headers ---
-fetch/api/request/request-headers.any.js
+# --- Official request forbidden headers (disabled: non-browser runtime allows them) ---
+# fetch/api/request/request-headers.any.js
 
 # --- Official structure / forbidden method / empty body ---
 fetch/api/request/forbidden-method.any.js

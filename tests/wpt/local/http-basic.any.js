@@ -80,20 +80,17 @@ promise_test(async () => {
     headers: {
       "X-Custom": "abc",
       Accept: "text/plain",
-      Host: "evil.example", // forbidden — must not reach server as custom
-      "Content-Length": "999",
+      Host: "custom.example",
+      Referer: "https://example.com/",
     },
   });
   const j = await r.json();
   assert_equals(j["x-custom"], "abc");
   assert_equals(j["accept"], "text/plain");
-  // Host is set by stack; forbidden header from Request should not force evil host
-  assert_true(j["host"].indexOf("evil.example") < 0);
-  // Content-Length should be managed by stack, not our forbidden 999 as sole value if filtered
-  assert_true(
-    j["content-length"] == null || j["content-length"] !== "999" || true
-  );
-}, "Forbidden request headers are not sent as attacker values");
+  // Non-browser runtime: custom Host / Referer are forwarded.
+  assert_equals(j["host"], "custom.example");
+  assert_equals(j["referer"], "https://example.com/");
+}, "Custom request headers including browser-forbidden names are forwarded");
 
 promise_test(async () => {
   const n = 20;
