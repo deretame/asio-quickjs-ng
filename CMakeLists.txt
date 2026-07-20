@@ -99,15 +99,14 @@ FetchContent_Declare(
   GIT_SHALLOW TRUE
 )
 
-# --- stduuid (header-only UUID library) ---
+# --- boost (header-only; used for uuid) ---
 FetchContent_Declare(
-  stduuid
-  GIT_REPOSITORY https://github.com/mariusbancila/stduuid.git
-  GIT_TAG v1.2.3
-  GIT_SHALLOW TRUE
+  boost
+  URL https://archives.boost.io/release/1.87.0/source/boost_1_87_0.tar.gz
+  URL_HASH SHA256=f55c340aa49763b1925ccf02b2e83f35fdcf634c9d5164a2acb87540173c741d
 )
 
-FetchContent_MakeAvailable(spdlog quickjs curl nlohmann_json reflectcpp stduuid)
+FetchContent_MakeAvailable(spdlog quickjs curl nlohmann_json reflectcpp boost)
 
 FetchContent_GetProperties(asio)
 if(NOT asio_POPULATED)
@@ -127,6 +126,9 @@ endif()
 add_library(async_simple_headers INTERFACE)
 target_include_directories(async_simple_headers INTERFACE "${async_simple_SOURCE_DIR}")
 target_compile_definitions(async_simple_headers INTERFACE ASYNC_SIMPLE_HAS_NOT_AIO)
+
+add_library(boost_headers INTERFACE)
+target_include_directories(boost_headers INTERFACE "${boost_SOURCE_DIR}")
 
 # --- core library (host + fetch layers) ---
 add_library(asio_qjs_core
@@ -148,7 +150,7 @@ target_link_libraries(asio_qjs_core PUBLIC
   async_simple_headers
   nlohmann_json::nlohmann_json
   reflectcpp::reflectcpp
-  stduuid
+  boost_headers
 )
 if(WIN32)
   target_link_libraries(asio_qjs_core PUBLIC

@@ -4,7 +4,9 @@
 #include <async_simple/Try.h>
 #include <async_simple/coro/FutureAwaiter.h>
 #include <async_simple/coro/Lazy.h>
-#include <uuid.h>
+#include <boost/uuid/random_generator.hpp>
+#include <boost/uuid/uuid.hpp>
+#include <boost/uuid/uuid_io.hpp>
 
 #include <chrono>
 #include <cstdint>

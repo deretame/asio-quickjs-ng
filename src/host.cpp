@@ -6,7 +6,6 @@
 #include <cstring>
 #include <fstream>
 #include <optional>
-#include <random>
 #include <sstream>
 #include <stdexcept>
 #include <utility>
@@ -72,10 +71,8 @@ void set_timeout_fn(Host* host, qjs::Value callback,
 }  // namespace
 
 Host::Host() {
-  std::random_device rd;
-  std::mt19937 rng(rd());
-  uuids::uuid_random_generator gen(rng);
-  host_id = uuids::to_string(gen());
+  boost::uuids::random_generator gen;
+  host_id = boost::uuids::to_string(gen());
 }
 
 Host::Host(std::string id) : host_id(std::move(id)) {}

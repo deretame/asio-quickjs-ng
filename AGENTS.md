@@ -40,7 +40,7 @@ Planned (not yet implemented):
 | JSON | nlohmann/json 3.12.0 | Dynamic JSON DOM. |
 | Reflection | reflect-cpp 0.25.0 | Struct ↔ JSON via reflection (bundles yyjson). |
 | Testing | Google Test 1.17.0 | C++ unit tests. |
-| ID generation | stduuid 1.2.3 | Header-only UUID v4 used as the default per-instance Host ID. |
+| ID generation | boost 1.87.0 | Header-only `boost::uuids` used for the default per-instance Host ID. |
 | JS fixtures | Node.js | WPT network test server (`tests/wpt/node_test_server.mjs`). |
 
 ## Directory layout
