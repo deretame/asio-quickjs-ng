@@ -43,6 +43,14 @@ FetchContent_Declare(
   GIT_SHALLOW TRUE
 )
 
+# --- libressl (OpenSSL replacement, built from source) ---
+FetchContent_Declare(
+  libressl
+  URL https://ftp.openbsd.org/pub/OpenBSD/LibreSSL/libressl-4.3.2.tar.gz
+  URL_HASH SHA256=edf01aee24c65d69e6a9efcb9d44bcda682ff9d4f3bbbd95e794e1dfa90847b5
+  DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+)
+
 # --- curl ---
 set(BUILD_CURL_EXE OFF CACHE BOOL "" FORCE)
 set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
@@ -106,6 +114,46 @@ FetchContent_Declare(
   URL_HASH SHA256=f55c340aa49763b1925ccf02b2e83f35fdcf634c9d5164a2acb87540173c741d
 )
 
+# Build LibreSSL first so curl's find_package(OpenSSL) can locate it.
+FetchContent_GetProperties(libressl)
+if(NOT libressl_POPULATED)
+  FetchContent_Populate(libressl)
+endif()
+set(LIBRESSL_INSTALL_DIR "${CMAKE_BINARY_DIR}/libressl-install")
+if(NOT EXISTS "${LIBRESSL_INSTALL_DIR}/lib/libssl.a"
+   OR NOT EXISTS "${LIBRESSL_INSTALL_DIR}/lib/libcrypto.a")
+  message(STATUS "LibreSSL not built yet; configuring and building from source...")
+  execute_process(
+    COMMAND ${CMAKE_COMMAND}
+      -S "${libressl_SOURCE_DIR}"
+      -B "${libressl_BINARY_DIR}"
+      -G "${CMAKE_GENERATOR}"
+      -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
+      -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
+      -DCMAKE_INSTALL_PREFIX=${LIBRESSL_INSTALL_DIR}
+      -DCMAKE_INSTALL_LIBDIR=lib
+      -DLIBRESSL_APPS=OFF
+      -DLIBRESSL_TESTS=OFF
+      -DENABLE_NC=OFF
+      -DBUILD_SHARED_LIBS=OFF
+    RESULT_VARIABLE _libressl_configure_result
+  )
+  if(NOT _libressl_configure_result EQUAL 0)
+    message(FATAL_ERROR "LibreSSL configure failed")
+  endif()
+  execute_process(
+    COMMAND ${CMAKE_COMMAND} --build "${libressl_BINARY_DIR}" --target install -j
+    RESULT_VARIABLE _libressl_build_result
+  )
+  if(NOT _libressl_build_result EQUAL 0)
+    message(FATAL_ERROR "LibreSSL build failed")
+  endif()
+endif()
+set(LIBRESSL_INSTALL_DIR "${LIBRESSL_INSTALL_DIR}" CACHE INTERNAL "LibreSSL install prefix")
+set(OPENSSL_USE_STATIC_LIBS ON CACHE BOOL "" FORCE)
+set(OPENSSL_ROOT_DIR "${LIBRESSL_INSTALL_DIR}" CACHE PATH "" FORCE)
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")
+
 FetchContent_MakeAvailable(spdlog quickjs curl nlohmann_json reflectcpp boost)
 
 FetchContent_GetProperties(asio)
@@ -159,6 +207,7 @@ if(WIN32)
     bcrypt
     advapi32
     crypt32
+    ntdll
   )
 endif()
 if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")

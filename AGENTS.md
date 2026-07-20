@@ -35,6 +35,7 @@ Planned (not yet implemented):
 | JS engine | quickjs-ng (`master`) | Embedded ES2020+ runtime. |
 | Async I/O | asio 1.38.2 | Event loop, sockets, timers. |
 | HTTP client | libcurl 8.14.1 | Outbound HTTP/HTTPS through `curl_multi_*`. |
+| TLS / crypto | LibreSSL 4.3.2 | Static OpenSSL-compatible TLS/crypto for libcurl (built from source). |
 | Coroutines | async_simple 1.4 | `Lazy<void>` coroutines scheduled on asio. |
 | Logging | spdlog 1.15.3 | Runtime logs. |
 | JSON | nlohmann/json 3.12.0 | Dynamic JSON DOM. |
