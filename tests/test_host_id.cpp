@@ -9,14 +9,16 @@
 
 namespace {
 
-bool setup_host(Host& host) {
+bool setup_host(Host &host)
+{
   if (!host) {
     return false;
   }
   return host.install_runtime();
 }
 
-std::string js_str(qjs::Value v) {
+std::string js_str(qjs::Value v)
+{
   auto s = v.to_std_string();
   return s.value_or("");
 }
@@ -46,7 +48,7 @@ TEST(HostId, DefaultIdIsUuidV4Shape) {
   Host host;
   ASSERT_TRUE(host);
 
-  const std::string& id = host.id();
+  const std::string &id = host.id();
   ASSERT_EQ(id.length(), 36u);
   EXPECT_EQ(id[8], '-');
   EXPECT_EQ(id[13], '-');
@@ -54,9 +56,10 @@ TEST(HostId, DefaultIdIsUuidV4Shape) {
   EXPECT_EQ(id[18], '-');
   // Variant RFC 4122: byte 8's top two bits are 10 -> high nibble is 8/9/a/b.
   char variant_nibble = id[19];
-  EXPECT_TRUE(variant_nibble == '8' || variant_nibble == '9' ||
-              variant_nibble == 'a' || variant_nibble == 'b')
-      << "variant nibble was " << variant_nibble;
+  EXPECT_TRUE(
+    variant_nibble == '8' || variant_nibble == '9'
+    || variant_nibble == 'a' || variant_nibble == 'b')
+    << "variant nibble was " << variant_nibble;
   EXPECT_EQ(id[23], '-');
 }
 
@@ -67,11 +70,12 @@ TEST(HostId, CustomIdCanBeProvided) {
   EXPECT_EQ(host.id(), "my-custom-instance-id");
 
   ASSERT_TRUE(setup_host(host));
-  ASSERT_TRUE(host.eval_source(
-      R"JS(
+  ASSERT_TRUE(
+    host.eval_source(
+    R"JS(
         globalThis.__customId = globalThis.__hostID;
       )JS",
-      "custom_id.js"));
+    "custom_id.js"));
   EXPECT_EQ(js_str(host.global().get("__customId")), "my-custom-instance-id");
 }
 
@@ -79,11 +83,12 @@ TEST(HostId, IdIsExposedToJs) {
   Host host;
   ASSERT_TRUE(setup_host(host));
 
-  ASSERT_TRUE(host.eval_source(
-      R"JS(
+  ASSERT_TRUE(
+    host.eval_source(
+    R"JS(
         globalThis.__jsId = globalThis.__hostID;
       )JS",
-      "id_exposed.js"));
+    "id_exposed.js"));
 
   std::string cpp_id = host.id();
   std::string js_id = js_str(host.global().get("__jsId"));

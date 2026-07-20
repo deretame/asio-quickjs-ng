@@ -13,73 +13,97 @@ Global g_curl_global;
 }  // namespace
 
 struct CurlWatch : std::enable_shared_from_this<CurlWatch> {
-  Client* client = nullptr;
+  Client *client = nullptr;
   curl_socket_t fd = CURL_SOCKET_BAD;
   asio::ip::tcp::socket sock;
   int action = 0;
   bool read_armed = false;
   bool write_armed = false;
 
-  explicit CurlWatch(Client* r, curl_socket_t s)
-      : client(r), fd(s), sock(r->ioc_) {}
+  explicit CurlWatch(Client *r, curl_socket_t s)
+    : client(r), fd(s), sock(r->ioc_) {}
 
-  bool alive() const {
+  bool alive() const
+  {
     auto it = client->watches_.find(fd);
     return it != client->watches_.end() && it->second.get() == this;
   }
 
-  void update(int what) {
+  void update(int what)
+  {
     action = what;
     arm();
   }
 
-  void dispose() {
+  void dispose()
+  {
     asio::error_code ec;
     action = 0;
     sock.cancel();
     sock.release(ec);
   }
 
-  void arm() {
+  void arm()
+  {
     if (client->stopping_) {
       return;
     }
-    arm_dir(CURL_POLL_IN, CURL_CSELECT_IN, read_armed,
-            asio::ip::tcp::socket::wait_read);
-    arm_dir(CURL_POLL_OUT, CURL_CSELECT_OUT, write_armed,
-            asio::ip::tcp::socket::wait_write);
+    arm_dir(
+      CURL_POLL_IN,
+      CURL_CSELECT_IN,
+      read_armed,
+      asio::ip::tcp::socket::wait_read);
+    arm_dir(
+      CURL_POLL_OUT,
+      CURL_CSELECT_OUT,
+      write_armed,
+      asio::ip::tcp::socket::wait_write);
   }
 
- private:
-  void arm_dir(int poll_bit, int ev_bit, bool& /*armed*/,
-               asio::ip::tcp::socket::wait_type wait) {
-    bool& flag = (poll_bit == CURL_POLL_IN) ? read_armed : write_armed;
+private:
+  void arm_dir(
+    int poll_bit,
+    int ev_bit,
+    bool & /*armed*/,
+    asio::ip::tcp::socket::wait_type wait
+)
+  {
+    bool &flag = (poll_bit == CURL_POLL_IN) ? read_armed : write_armed;
     if (!(action & poll_bit) || flag) {
       return;
     }
     flag = true;
     auto self = shared_from_this();
-    sock.async_wait(wait, [self, poll_bit, ev_bit](const asio::error_code& ec) {
-      bool& armed =
-          (poll_bit == CURL_POLL_IN) ? self->read_armed : self->write_armed;
-      armed = false;
-      if (ec || self->client->stopping_) {
-        return;
-      }
-      if (self->action & poll_bit) {
-        self->client->on_socket_action(self->fd, ev_bit);
-      }
-      if (self->alive()) {
-        self->arm();
-      }
-    });
+    sock.async_wait(
+      wait,
+      [self, poll_bit, ev_bit](const asio::error_code &ec) {
+        bool &armed =
+        (poll_bit == CURL_POLL_IN) ? self->read_armed : self->write_armed;
+        armed = false;
+        if (ec || self->client->stopping_) {
+          return;
+        }
+        if (self->action & poll_bit) {
+          self->client->on_socket_action(self->fd, ev_bit);
+        }
+        if (self->alive()) {
+          self->arm();
+        }
+      });
   }
+
 };
 
-int curl_socket_callback(CURL* /*easy*/, curl_socket_t s, int what, void* userp,
-                         void* socketp) {
-  auto* client = static_cast<Client*>(userp);
-  auto* old = static_cast<CurlWatch*>(socketp);
+int curl_socket_callback(
+  CURL * /*easy*/,
+  curl_socket_t s,
+  int what,
+  void *userp,
+  void *socketp
+)
+{
+  auto *client = static_cast<Client *>(userp);
+  auto *old = static_cast<CurlWatch *>(socketp);
 
   if (what == CURL_POLL_REMOVE) {
     if (old) {
@@ -111,37 +135,42 @@ int curl_socket_callback(CURL* /*easy*/, curl_socket_t s, int what, void* userp,
   return 0;
 }
 
-int curl_timer_callback(CURLM* /*multi*/, long timeout_ms, void* userp) {
-  auto* client = static_cast<Client*>(userp);
+int curl_timer_callback(CURLM * /*multi*/, long timeout_ms, void *userp)
+{
+  auto *client = static_cast<Client *>(userp);
   client->arm_timer(timeout_ms);
   return 0;
 }
 
-Client::Client(AsioExecutor& ex)
-    : ex_(ex),
-      ioc_(*static_cast<asio::io_context*>(ex.checkout())),
-      timer_(ioc_) {
+Client::Client(AsioExecutor &ex)
+  : ex_(ex),
+  ioc_(*static_cast<asio::io_context *>(ex.checkout())),
+  timer_(ioc_)
+{
   multi_.set_socket_function(curl_socket_callback, this);
   multi_.set_timer_function(curl_timer_callback, this);
 }
 
 Client::~Client() { shutdown(); }
 
-void Client::arm_timer(long timeout_ms) {
+void Client::arm_timer(long timeout_ms)
+{
   timer_.cancel();
   if (timeout_ms < 0 || stopping_) {
     return;
   }
   timer_.expires_after(std::chrono::milliseconds(timeout_ms));
-  timer_.async_wait([self = shared_from_this()](const asio::error_code& err) {
-    if (err || self->stopping_) {
-      return;
-    }
-    self->on_socket_action(CURL_SOCKET_TIMEOUT, 0);
-  });
+  timer_.async_wait(
+    [self = shared_from_this()](const asio::error_code &err) {
+      if (err || self->stopping_) {
+        return;
+      }
+      self->on_socket_action(CURL_SOCKET_TIMEOUT, 0);
+    });
 }
 
-void Client::on_socket_action(curl_socket_t fd, int ev_bitmask) {
+void Client::on_socket_action(curl_socket_t fd, int ev_bitmask)
+{
   if (!multi_ || stopping_) {
     return;
   }
@@ -153,15 +182,16 @@ void Client::on_socket_action(curl_socket_t fd, int ev_bitmask) {
   on_multi_messages();
 }
 
-void Client::on_multi_messages() {
+void Client::on_multi_messages()
+{
   int msgs = 0;
-  while (CURLMsg* msg = multi_.info_read(&msgs)) {
+  while (CURLMsg *msg = multi_.info_read(&msgs)) {
     if (msg->msg != CURLMSG_DONE) {
       continue;
     }
-    char* private_ptr = nullptr;
+    char *private_ptr = nullptr;
     curl_easy_getinfo(msg->easy_handle, CURLINFO_PRIVATE, &private_ptr);
-    auto* tr = reinterpret_cast<Transfer*>(private_ptr);
+    auto *tr = reinterpret_cast<Transfer *>(private_ptr);
     if (!tr) {
       continue;
     }
@@ -173,7 +203,8 @@ void Client::on_multi_messages() {
   }
 }
 
-bool Client::add_transfer(Transfer* tr) {
+bool Client::add_transfer(Transfer *tr)
+{
   if (!tr || !tr->easy) {
     return false;
   }
@@ -185,7 +216,8 @@ bool Client::add_transfer(Transfer* tr) {
   return true;
 }
 
-void Client::remove_transfer(Transfer* tr) {
+void Client::remove_transfer(Transfer *tr)
+{
   if (tr && tr->easy) {
     multi_.remove(tr->easy.get());
   }
@@ -193,10 +225,11 @@ void Client::remove_transfer(Transfer* tr) {
 
 void Client::notify() { on_socket_action(CURL_SOCKET_TIMEOUT, 0); }
 
-void Client::shutdown() {
+void Client::shutdown()
+{
   stopping_ = true;
   timer_.cancel();
-  for (auto& kv : watches_) {
+  for (auto &kv : watches_) {
     kv.second->dispose();
   }
   watches_.clear();
@@ -204,16 +237,26 @@ void Client::shutdown() {
 
 // Transfer method implementations (moved here because they need Client).
 
-size_t Transfer::write_cb(char* ptr, size_t size, size_t nmemb,
-                          void* userdata) {
-  auto* self = static_cast<Transfer*>(userdata);
+size_t Transfer::write_cb(
+  char *ptr,
+  size_t size,
+  size_t nmemb,
+  void *userdata
+)
+{
+  auto *self = static_cast<Transfer *>(userdata);
   self->body.append(ptr, size * nmemb);
   return size * nmemb;
 }
 
-size_t Transfer::header_cb(char* ptr, size_t size, size_t nmemb,
-                           void* userdata) {
-  auto* self = static_cast<Transfer*>(userdata);
+size_t Transfer::header_cb(
+  char *ptr,
+  size_t size,
+  size_t nmemb,
+  void *userdata
+)
+{
+  auto *self = static_cast<Transfer *>(userdata);
   const size_t n = size * nmemb;
   std::string line(ptr, n);
   while (!line.empty() && (line.back() == '\n' || line.back() == '\r')) {
@@ -241,15 +284,16 @@ size_t Transfer::header_cb(char* ptr, size_t size, size_t nmemb,
   HeaderPair hp;
   hp.name = line.substr(0, colon);
   hp.value = line.substr(colon + 1);
-  while (!hp.value.empty() &&
-         (hp.value.front() == ' ' || hp.value.front() == '\t')) {
+  while (!hp.value.empty()
+    && (hp.value.front() == ' ' || hp.value.front() == '\t')) {
     hp.value.erase(hp.value.begin());
   }
   self->response_headers.push_back(std::move(hp));
   return n;
 }
 
-void Transfer::finish(FetchResult result) {
+void Transfer::finish(FetchResult result)
+{
   if (finished) {
     return;
   }
@@ -269,7 +313,8 @@ void Transfer::finish(FetchResult result) {
   }
 }
 
-void Transfer::abort() {
+void Transfer::abort()
+{
   FetchResult r;
   r.ok = false;
   r.aborted = true;
@@ -278,7 +323,8 @@ void Transfer::abort() {
   finish(std::move(r));
 }
 
-bool Transfer::start() {
+bool Transfer::start()
+{
   if (!easy || !client) {
     return false;
   }
@@ -306,23 +352,26 @@ bool Transfer::start() {
   } else if (method == "POST") {
     easy.setopt(CURLOPT_POST, 1L);
     easy.setopt(CURLOPT_POSTFIELDS, options.body.c_str());
-    easy.setopt(CURLOPT_POSTFIELDSIZE_LARGE,
-                static_cast<curl_off_t>(options.body.size()));
+    easy.setopt(
+      CURLOPT_POSTFIELDSIZE_LARGE,
+      static_cast<curl_off_t>(options.body.size()));
   } else if (method == "PUT") {
     easy.setopt(CURLOPT_CUSTOMREQUEST, "PUT");
     easy.setopt(CURLOPT_POSTFIELDS, options.body.c_str());
-    easy.setopt(CURLOPT_POSTFIELDSIZE_LARGE,
-                static_cast<curl_off_t>(options.body.size()));
+    easy.setopt(
+      CURLOPT_POSTFIELDSIZE_LARGE,
+      static_cast<curl_off_t>(options.body.size()));
   } else {
     easy.setopt(CURLOPT_CUSTOMREQUEST, method.c_str());
     if (!options.body.empty()) {
       easy.setopt(CURLOPT_POSTFIELDS, options.body.c_str());
-      easy.setopt(CURLOPT_POSTFIELDSIZE_LARGE,
-                  static_cast<curl_off_t>(options.body.size()));
+      easy.setopt(
+        CURLOPT_POSTFIELDSIZE_LARGE,
+        static_cast<curl_off_t>(options.body.size()));
     }
   }
 
-  for (const auto& h : options.headers) {
+  for (const auto &h : options.headers) {
     std::string line = h.name + ": " + h.value;
     req_headers = curl_slist_append(req_headers, line.c_str());
   }
@@ -333,10 +382,11 @@ bool Transfer::start() {
   return client->multi_.add(easy.get()) == CURLM_OK;
 }
 
-FetchResult Transfer::make_result(CURLcode code) {
+FetchResult Transfer::make_result(CURLcode code)
+{
   FetchResult r;
   r.url = options.url;
-  char* effective = nullptr;
+  char *effective = nullptr;
   if (easy.getinfo(CURLINFO_EFFECTIVE_URL, &effective) && effective) {
     r.url = effective;
   }

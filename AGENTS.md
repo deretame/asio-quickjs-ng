@@ -281,6 +281,32 @@ If you edit a `.js` file, you must rebuild for the `#embed` to pick up the new b
 - **Host* callback parameter**: registered callbacks can optionally take a `Host*` (or `Host&`) parameter to identify the caller. It does not consume a JS argument, so `call("name", 1, 2)` can invoke a C++ callback `int(Host*, int, int)`. Use `host->id()` as a key when you need per-instance data isolation in shared global functions.
 - **Pending ops**: async operations (timers, fetches) increment `pending_ops`. The event loop exits when `pending_ops == 0` and no JS jobs are pending. If a callback forgets to decrement, the loop will hang.
 
+## C++ code formatting
+
+This project uses [Uncrustify](https://github.com/uncrustify/uncrustify) with the Rust-style configuration in `uncrustify.cfg`.
+
+- After editing any C++ file (`src/` or `tests/`), reformat it before committing.
+- VS Code: project-level auto-format on save is disabled for C/C++ in `.vscode/settings.json`; run Uncrustify manually.
+- Format a single file:
+  ```powershell
+  .tools/bin/uncrustify.exe -c uncrustify.cfg -f src/some_file.cpp -o src/some_file.cpp --no-backup
+  ```
+- Batch format all C++ sources (from the project root):
+  ```powershell
+  for f in src/*.cpp src/*.hpp tests/*.cpp tests/*.hpp; do
+      .tools/bin/uncrustify.exe -c uncrustify.cfg -f $f -o $f --no-backup
+  done
+  ```
+
+### Downloading Uncrustify
+
+The binary is intentionally kept out of Git. A Windows x64 build can be downloaded from the [Uncrustify GitHub releases](https://github.com/uncrustify/uncrustify/releases) page (look for `uncrustify-X.Y.Z_f-win64.zip`). Extract the `.exe` to `.tools/bin/`; the `.tools/` directory is already listed in `.gitignore` and must not be committed.
+
+### Known limitations
+
+- Long function signatures are split so each parameter is indented one level from the declaration line, not aligned under the opening parenthesis. This matches the Rust style you want, but C++ return types live before the function name, so very long return types (like `async_simple::coro::Lazy<void>`) may end up on their own line.
+- Nested function calls can come out slightly off; if a call like `host->spawn_lazy(handle_async_call(...))` formats awkwardly, fix it by hand or split into a temporary variable.
+
 ## Where to start
 
 - To understand the runtime: `src/host.hpp`, `src/host.cpp`, `src/main.cpp`.

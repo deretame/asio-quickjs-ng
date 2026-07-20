@@ -45,31 +45,32 @@ constexpr unsigned char kJsFetchBytes[] = {
 };
 
 struct EmbeddedJs {
-  const char* name;
-  const unsigned char* bytes;
+  const char *name;
+  const unsigned char *bytes;
   std::size_t size;
 };
 
 constexpr EmbeddedJs kBootstrapJs[] = {
-    {"js/abort.js", kJsAbortBytes, sizeof(kJsAbortBytes)},
-    {"js/text-encoding-polyfill.js", kJsTextEncodingPolyfillBytes,
-     sizeof(kJsTextEncodingPolyfillBytes)},
-    {"js/whatwg-url-polyfill.js", kJsWhatwgUrlPolyfillBytes,
-     sizeof(kJsWhatwgUrlPolyfillBytes)},
-    {"js/body_polyfill.js", kJsBodyPolyfillBytes, sizeof(kJsBodyPolyfillBytes)},
-    {"js/headers.js", kJsHeadersBytes, sizeof(kJsHeadersBytes)},
-    {"js/request.js", kJsRequestBytes, sizeof(kJsRequestBytes)},
-    {"js/response.js", kJsResponseBytes, sizeof(kJsResponseBytes)},
-    {"js/fetch.js", kJsFetchBytes, sizeof(kJsFetchBytes)},
+  {"js/abort.js", kJsAbortBytes, sizeof(kJsAbortBytes)},
+  {"js/text-encoding-polyfill.js", kJsTextEncodingPolyfillBytes,
+   sizeof(kJsTextEncodingPolyfillBytes)},
+  {"js/whatwg-url-polyfill.js", kJsWhatwgUrlPolyfillBytes,
+   sizeof(kJsWhatwgUrlPolyfillBytes)},
+  {"js/body_polyfill.js", kJsBodyPolyfillBytes, sizeof(kJsBodyPolyfillBytes)},
+  {"js/headers.js", kJsHeadersBytes, sizeof(kJsHeadersBytes)},
+  {"js/request.js", kJsRequestBytes, sizeof(kJsRequestBytes)},
+  {"js/response.js", kJsResponseBytes, sizeof(kJsResponseBytes)},
+  {"js/fetch.js", kJsFetchBytes, sizeof(kJsFetchBytes)},
 };
 
-std::string js_prop_string(JSContext* ctx, JSValueConst obj, const char* name) {
+std::string js_prop_string(JSContext *ctx, JSValueConst obj, const char *name)
+{
   JSValue v = JS_GetPropertyStr(ctx, obj, name);
   if (JS_IsUndefined(v) || JS_IsNull(v) || JS_IsException(v)) {
     JS_FreeValue(ctx, v);
     return {};
   }
-  const char* s = JS_ToCString(ctx, v);
+  const char *s = JS_ToCString(ctx, v);
   JS_FreeValue(ctx, v);
   if (!s) {
     return {};
@@ -79,7 +80,8 @@ std::string js_prop_string(JSContext* ctx, JSValueConst obj, const char* name) {
   return out;
 }
 
-FetchOptions parse_options(JSContext* ctx, JSValueConst opts) {
+FetchOptions parse_options(JSContext *ctx, JSValueConst opts)
+{
   FetchOptions o;
   if (!JS_IsObject(opts)) {
     JS_ThrowTypeError(ctx, "__nativeFetch expects an options object");
@@ -115,12 +117,12 @@ FetchOptions parse_options(JSContext* ctx, JSValueConst opts) {
     JS_FreeValue(ctx, len_v);
     for (int32_t i = 0; i < len; ++i) {
       JSValue pair =
-          JS_GetPropertyUint32(ctx, headers, static_cast<uint32_t>(i));
+        JS_GetPropertyUint32(ctx, headers, static_cast<uint32_t>(i));
       if (JS_IsArray(pair)) {
         JSValue n = JS_GetPropertyUint32(ctx, pair, 0);
         JSValue v = JS_GetPropertyUint32(ctx, pair, 1);
-        const char* ns = JS_ToCString(ctx, n);
-        const char* vs = JS_ToCString(ctx, v);
+        const char *ns = JS_ToCString(ctx, n);
+        const char *vs = JS_ToCString(ctx, v);
         if (ns && vs) {
           o.headers.push_back(HeaderPair{ns, vs});
         }
@@ -140,8 +142,9 @@ FetchOptions parse_options(JSContext* ctx, JSValueConst opts) {
   return o;
 }
 
-qjs::Value make_raw_result(Host* host, const FetchResult& r) {
-  JSContext* ctx = host->js_raw();
+qjs::Value make_raw_result(Host *host, const FetchResult &r)
+{
+  JSContext *ctx = host->js_raw();
   qjs::Value o = host->ctx.object();
   o.set("ok", host->ctx.new_bool(r.ok));
   o.set("status", host->ctx.new_int32(static_cast<int32_t>(r.status)));
@@ -156,7 +159,7 @@ qjs::Value make_raw_result(Host* host, const FetchResult& r) {
 
   JSValue arr = JS_NewArray(ctx);
   uint32_t idx = 0;
-  for (const auto& h : r.headers) {
+  for (const auto &h : r.headers) {
     JSValue pair = JS_NewArray(ctx);
     JS_SetPropertyUint32(ctx, pair, 0, JS_NewString(ctx, h.name.c_str()));
     JS_SetPropertyUint32(ctx, pair, 1, JS_NewString(ctx, h.value.c_str()));
@@ -166,10 +169,16 @@ qjs::Value make_raw_result(Host* host, const FetchResult& r) {
   return o;
 }
 
-Lazy<void> native_fetch_coro(Host* host, FetchOptions options, uint64_t id,
-                             qjs::Value resolve, qjs::Value reject) {
+Lazy<void> native_fetch_coro(
+  Host *host,
+  FetchOptions options,
+  uint64_t id,
+  qjs::Value resolve,
+  qjs::Value reject
+)
+{
   FetchResult result =
-      co_await fetch_api::async_fetch(*host, std::move(options), id);
+    co_await fetch_api::async_fetch(*host, std::move(options), id);
 
   host->fetch_transfers.erase(id);
 
@@ -184,9 +193,10 @@ Lazy<void> native_fetch_coro(Host* host, FetchOptions options, uint64_t id,
   co_return;
 }
 
-bool install_bootstrap_js(Host& host) {
-  for (const EmbeddedJs& script : kBootstrapJs) {
-    std::string_view src{reinterpret_cast<const char*>(script.bytes),
+bool install_bootstrap_js(Host &host)
+{
+  for (const EmbeddedJs &script : kBootstrapJs) {
+    std::string_view src{reinterpret_cast<const char *>(script.bytes),
                          script.size};
     qjs::Value ret = host.ctx.eval(src, script.name, JS_EVAL_TYPE_GLOBAL);
     if (ret.is_exception()) {
@@ -203,7 +213,8 @@ bool install_bootstrap_js(Host& host) {
 
 namespace fetch_api {
 
-Lazy<FetchResult> async_fetch(Host& host, FetchOptions options, uint64_t id) {
+Lazy<FetchResult> async_fetch(Host &host, FetchOptions options, uint64_t id)
+{
   Promise<FetchResult> p;
   auto fut = p.getFuture();
 
@@ -216,12 +227,12 @@ Lazy<FetchResult> async_fetch(Host& host, FetchOptions options, uint64_t id) {
     co_return std::move(r);
   }
 
-  auto* tr = new Transfer();
+  auto *tr = new Transfer();
   tr->options = std::move(options);
   tr->id = id;
   tr->complete = [p = std::move(p)](FetchResult result) mutable {
-    p.setValue(std::move(result));
-  };
+      p.setValue(std::move(result));
+    };
 
   if (id != 0) {
     host.fetch_transfers[id] = tr;
@@ -244,7 +255,8 @@ Lazy<FetchResult> async_fetch(Host& host, FetchOptions options, uint64_t id) {
   co_return result;
 }
 
-qjs::Value native_fetch_fn(Host* host, qjs::Value opts) {
+qjs::Value native_fetch_fn(Host *host, qjs::Value opts)
+{
   FetchOptions options = parse_options(host->js_raw(), opts.raw());
   const uint64_t id = host->next_fetch_id++;
 
@@ -254,9 +266,13 @@ qjs::Value native_fetch_fn(Host* host, qjs::Value opts) {
   }
 
   ++host->pending_ops;
-  host->spawn_lazy(native_fetch_coro(host, std::move(options), id,
-                                     std::move(cap->resolve),
-                                     std::move(cap->reject)));
+  host->spawn_lazy(
+    native_fetch_coro(
+    host,
+    std::move(options),
+    id,
+    std::move(cap->resolve),
+    std::move(cap->reject)));
 
   qjs::Value out = host->ctx.object();
   out.set("id", host->ctx.new_int32(static_cast<int32_t>(id)));
@@ -264,12 +280,13 @@ qjs::Value native_fetch_fn(Host* host, qjs::Value opts) {
   return out;
 }
 
-void native_fetch_abort_fn(Host* host, int32_t id) {
+void native_fetch_abort_fn(Host *host, int32_t id)
+{
   auto it = host->fetch_transfers.find(static_cast<uint64_t>(id));
   if (it == host->fetch_transfers.end()) {
     return;
   }
-  Transfer* tr = it->second;
+  Transfer *tr = it->second;
   host->fetch_transfers.erase(it);
   if (!tr) {
     return;
@@ -280,7 +297,8 @@ void native_fetch_abort_fn(Host* host, int32_t id) {
   delete tr;
 }
 
-bool install(Host& host) {
+bool install(Host &host)
+{
   host.global().fn<&native_fetch_fn>("__nativeFetch");
   host.global().fn<&native_fetch_abort_fn>("__nativeFetchAbort");
   return install_bootstrap_js(host);

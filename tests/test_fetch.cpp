@@ -15,21 +15,26 @@ namespace {
 
 namespace fs = std::filesystem;
 
-bool setup_host(Host& host) {
+bool setup_host(Host &host)
+{
   return host && host.install_runtime() && fetch_api::install(host);
 }
 
-bool js_truthy(Host& host, qjs::Value v) {
+bool js_truthy(Host &host, qjs::Value v)
+{
   return JS_ToBool(host.js_raw(), v.raw()) != 0;
 }
 
-std::string js_str(qjs::Value v) {
+std::string js_str(qjs::Value v)
+{
   auto s = v.to_std_string();
   return s.value_or("");
 }
 
-void run_js_async(Host& host, const std::string& body) {
-  std::string code = R"JS(
+void run_js_async(Host &host, const std::string &body)
+{
+  std::string code =
+    R"JS(
     globalThis.__done = false;
     globalThis.__err = "";
     globalThis.__assert = function (cond, msg) {
@@ -38,7 +43,8 @@ void run_js_async(Host& host, const std::string& body) {
     (async () => {
   )JS";
   code += body;
-  code += R"JS(
+  code +=
+    R"JS(
     })().then(() => { globalThis.__done = true; })
       .catch((e) => {
         globalThis.__err = String(e && e.message ? e.message : e);
@@ -51,7 +57,8 @@ void run_js_async(Host& host, const std::string& body) {
   EXPECT_EQ(js_str(host.global().get("__err")), "");
 }
 
-std::string quote_js(const std::string& s) {
+std::string quote_js(const std::string &s)
+{
   std::string out = "\"";
   for (unsigned char c : s) {
     if (c == '\\' || c == '"') {
@@ -68,28 +75,35 @@ std::string quote_js(const std::string& s) {
 }  // namespace
 
 class FetchLocal : public ::testing::Test {
- protected:
-  void SetUp() override {
-    auto script = fs::path(ASIO_QJS_SOURCE_DIR) / "tests" / "wpt" /
-                  "node_test_server.mjs";
-    server_.start(script);
-    ASSERT_TRUE(setup_host(host_));
-    origin_ = server_.origin();
-    ASSERT_TRUE(host_.eval_source(
-        "globalThis.__ORIGIN = " + quote_js(origin_) + ";", "origin.js"));
-  }
-  void TearDown() override {
-    host_.shutdown();
-    server_.stop();
-  }
+protected:
+void SetUp() override
+{
+  auto script =
+    fs::path(ASIO_QJS_SOURCE_DIR) / "tests" / "wpt" / "node_test_server.mjs";
+  server_.start(script);
+  ASSERT_TRUE(setup_host(host_));
+  origin_ = server_.origin();
+  ASSERT_TRUE(
+    host_.eval_source(
+    "globalThis.__ORIGIN = " + quote_js(origin_) + ";",
+    "origin.js"));
+}
 
-  NodeFixtureServer server_;
-  Host host_;
-  std::string origin_;
+void TearDown() override
+{
+  host_.shutdown();
+  server_.stop();
+}
+
+NodeFixtureServer server_;
+Host host_;
+std::string origin_;
 };
 
 TEST_F(FetchLocal, GetText) {
-  run_js_async(host_, R"JS(
+  run_js_async(
+    host_,
+    R"JS(
     const res = await fetch(__ORIGIN + "/text");
     __assert(res.status === 200 && res.ok);
     __assert((await res.text()) === "Hello WPT");
@@ -97,7 +111,9 @@ TEST_F(FetchLocal, GetText) {
 }
 
 TEST_F(FetchLocal, PostEcho) {
-  run_js_async(host_, R"JS(
+  run_js_async(
+    host_,
+    R"JS(
     const res = await fetch(__ORIGIN + "/echo", {
       method: "POST", body: "ping-body",
       headers: { "Content-Type": "text/plain" },
@@ -107,14 +123,18 @@ TEST_F(FetchLocal, PostEcho) {
 }
 
 TEST_F(FetchLocal, Http404Resolves) {
-  run_js_async(host_, R"JS(
+  run_js_async(
+    host_,
+    R"JS(
     const res = await fetch(__ORIGIN + "/status/404");
     __assert(res.status === 404 && res.ok === false);
   )JS");
 }
 
 TEST_F(FetchLocal, FollowRedirect) {
-  run_js_async(host_, R"JS(
+  run_js_async(
+    host_,
+    R"JS(
     const res = await fetch(__ORIGIN + "/redirect");
     __assert(res.redirected === true);
     __assert((await res.text()) === "Hello WPT");
@@ -122,7 +142,9 @@ TEST_F(FetchLocal, FollowRedirect) {
 }
 
 TEST_F(FetchLocal, NetworkErrorRejects) {
-  run_js_async(host_, R"JS(
+  run_js_async(
+    host_,
+    R"JS(
     let rejected = false;
     try { await fetch("http://127.0.0.1:1/"); }
     catch (e) { rejected = e instanceof TypeError; }
@@ -131,7 +153,9 @@ TEST_F(FetchLocal, NetworkErrorRejects) {
 }
 
 TEST_F(FetchLocal, AbortBeforeStart) {
-  run_js_async(host_, R"JS(
+  run_js_async(
+    host_,
+    R"JS(
     const c = new AbortController();
     c.abort();
     let name = "";
@@ -142,7 +166,9 @@ TEST_F(FetchLocal, AbortBeforeStart) {
 }
 
 TEST_F(FetchLocal, AbortDuringFetch) {
-  run_js_async(host_, R"JS(
+  run_js_async(
+    host_,
+    R"JS(
     const c = new AbortController();
     const p = fetch(__ORIGIN + "/text", { signal: c.signal });
     c.abort();
@@ -153,7 +179,9 @@ TEST_F(FetchLocal, AbortDuringFetch) {
 }
 
 TEST_F(FetchLocal, DataAndAboutSchemes) {
-  run_js_async(host_, R"JS(
+  run_js_async(
+    host_,
+    R"JS(
     const r = await fetch("data:,hi%20there");
     __assert(r.status === 200 && r.type === "basic");
     __assert((await r.text()) === "hi there");
@@ -165,8 +193,8 @@ TEST_F(FetchLocal, DataAndAboutSchemes) {
 
 TEST(FetchCpp, AsyncOptionsPost) {
   NodeFixtureServer server;
-  server.start(fs::path(ASIO_QJS_SOURCE_DIR) / "tests" / "wpt" /
-               "node_test_server.mjs");
+  server.start(
+    fs::path(ASIO_QJS_SOURCE_DIR) / "tests" / "wpt" / "node_test_server.mjs");
   Host host;
   ASSERT_TRUE(setup_host(host));
   curl_http::FetchOptions opt;
