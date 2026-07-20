@@ -1,6 +1,7 @@
 // Non-WPT fetch smoke tests (network fixtures via Node.js server).
 #include <gtest/gtest.h>
 
+#include <chrono>
 #include <cstdio>
 #include <filesystem>
 #include <string>
@@ -189,6 +190,36 @@ TEST_F(FetchLocal, DataAndAboutSchemes) {
     try { await fetch("about:blank"); } catch (e) { failed = e instanceof TypeError; }
     __assert(failed);
   )JS");
+}
+
+TEST_F(FetchLocal, ConcurrentThousandRequests) {
+  auto start = std::chrono::steady_clock::now();
+  run_js_async(
+    host_,
+    R"JS(
+    const n = 1000;
+    const ac = new AbortController();
+    const timeout = setTimeout(() => { ac.abort(); }, 50000);
+    const js_start = Date.now();
+    const promises = [];
+    for (let i = 0; i < n; ++i) {
+      promises.push(fetch(__ORIGIN + "/sleep", { signal: ac.signal }).then(r => r.text()));
+    }
+    try {
+      await Promise.all(promises);
+      const elapsed = Date.now() - js_start;
+      clearTimeout(timeout);
+      __assert(elapsed < 10000, "1000 concurrent requests took " + elapsed + "ms; expected under 10s");
+    } catch (e) {
+      clearTimeout(timeout);
+      __assert(false, "requests failed or aborted: " + (e && e.message ? e.message : e));
+    }
+  )JS");
+  auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+    std::chrono::steady_clock::now() - start).count();
+  EXPECT_LT(
+    elapsed_ms,
+    50000) << "wall-clock time for 1000 concurrent sleep requests was " << elapsed_ms << "ms";
 }
 
 TEST(FetchCpp, AsyncOptionsPost) {

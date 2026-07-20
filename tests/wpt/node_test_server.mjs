@@ -96,6 +96,11 @@ const server = http.createServer(async (req, res) => {
       return send(200, { "Content-Type": "text/plain" }, "");
     }
 
+    if (path === "/sleep") {
+      await delayMs(2000);
+      return send(200, { "Content-Type": "text/plain" }, "sleep-ok");
+    }
+
     if (path === "/slow" || path === "/infinite-slow-response") {
       const ms = Math.min(parseInt(u.searchParams.get("ms") || "500", 10) || 500, 10000);
       await delayMs(ms);

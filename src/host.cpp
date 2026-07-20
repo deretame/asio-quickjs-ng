@@ -50,11 +50,21 @@ void console_error_fn(qjs::Args args) { log_args(spdlog::level::err, args); }
 async_simple::coro::Lazy<void> timeout_coro(
   Host* host,
   qjs::Value callback,
+  int32_t id,
+  std::shared_ptr<asio::steady_timer> timer,
   std::chrono::milliseconds delay
 )
 {
-  co_await host->async_sleep(delay);
-  if (!host->stopping) {
+  async_simple::Promise<void> p;
+  auto fut = p.getFuture();
+  timer->expires_after(delay);
+  timer->async_wait(
+    [p = std::move(p), timer](const asio::error_code&) mutable {
+      p.setValue();
+    });
+  co_await std::move(fut);
+
+  if (!host->stopping && host->erase_timer_if_active(id)) {
     qjs::Value ret = callback.call();
     if (ret.is_exception()) {
       host->ctx.dump_exception();
@@ -65,7 +75,7 @@ async_simple::coro::Lazy<void> timeout_coro(
   co_return;
 }
 
-void set_timeout_fn(
+int32_t set_timeout_fn(
   Host* host,
   qjs::Value callback,
   std::optional<int32_t> delay_ms
@@ -78,9 +88,22 @@ void set_timeout_fn(
   if (ms < 0) {
     ms = 0;
   }
+  auto timer = std::make_shared<asio::steady_timer>(host->ioc);
+  int32_t id = host->register_timer(timer);
   ++host->pending_ops;
   host->spawn_lazy(
-    timeout_coro(host, std::move(callback), std::chrono::milliseconds(ms)));
+    timeout_coro(
+    host,
+    std::move(callback),
+    id,
+    std::move(timer),
+    std::chrono::milliseconds(ms)));
+  return id;
+}
+
+void clear_timeout_fn(Host* host, int32_t id)
+{
+  host->cancel_timer(id);
 }
 
 }  // namespace
@@ -94,6 +117,36 @@ Host::Host()
 Host::Host(std::string id) : host_id(std::move(id)) {}
 
 Host::~Host() { shutdown(); }
+
+int32_t Host::register_timer(std::shared_ptr<asio::steady_timer> timer)
+{
+  int32_t id = next_timer_id_++;
+  active_timers_[id] = std::move(timer);
+  return id;
+}
+
+void Host::cancel_timer(int32_t id)
+{
+  auto it = active_timers_.find(id);
+  if (it == active_timers_.end()) {
+    return;
+  }
+  auto timer = std::move(it->second);
+  active_timers_.erase(it);
+  if (timer) {
+    timer->cancel();
+  }
+}
+
+bool Host::erase_timer_if_active(int32_t id)
+{
+  auto it = active_timers_.find(id);
+  if (it == active_timers_.end()) {
+    return false;
+  }
+  active_timers_.erase(it);
+  return true;
+}
 
 void Host::spdlog_lazy_error(const char* msg)
 {
@@ -157,6 +210,7 @@ bool Host::install_runtime()
   auto g = global();
   g.fn<&print_fn>("print");
   g.fn<&set_timeout_fn>("setTimeout");
+  g.fn<&clear_timeout_fn>("clearTimeout");
   g.obj(
     "console",
     [](qjs::Value& c) {

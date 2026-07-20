@@ -51,7 +51,9 @@ struct Host {
   Host(const Host&) = delete;
   Host& operator=(const Host&) = delete;
 
-  explicit operator bool() const { return rt && ctx; }
+  explicit operator bool() const {
+    return rt && ctx;
+  }
 
   void shutdown();
   void run_loop();
@@ -118,6 +120,11 @@ struct Host {
       name,
       std::forward<Fn>(fn));
   }
+
+  // Timer registry for setTimeout / clearTimeout.
+  int32_t register_timer(std::shared_ptr<asio::steady_timer> timer);
+  void cancel_timer(int32_t id);
+  bool erase_timer_if_active(int32_t id);
 
   [[noreturn]] void throw_type_error(const char* msg);
   [[noreturn]] void throw_internal_error(const char* msg);
@@ -193,4 +200,7 @@ struct Host {
 
 private:
   static void spdlog_lazy_error(const char* msg);
+
+  int32_t next_timer_id_ = 1;
+  std::unordered_map<int32_t, std::shared_ptr<asio::steady_timer>> active_timers_;
 };

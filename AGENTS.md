@@ -12,7 +12,7 @@
 
 Current implemented features:
 
-- `setTimeout`, `print`, `console.*` (in `src/host.cpp`).
+- `setTimeout`, `clearTimeout`, `print`, `console.*` (in `src/host.cpp`).
 - `fetch` / `Request` / `Response` / `Headers` / `AbortController` (polyfills in `src/js/*.js`; C++ transport in `src/fetch.cpp`, `src/curl_http.hpp`, and `src/curl_runtime.cpp`).
 - Per-request `curl_http::Client` created inside `fetch_api::async_fetch` and discarded after the request completes.
 - `data:` and `about:` scheme handling in JS.
