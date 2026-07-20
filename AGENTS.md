@@ -18,7 +18,7 @@ Current implemented features:
 - `data:` and `about:` scheme handling in JS.
 - C++20 coroutine channels (`mpsc`, `oneshot`) in `src/channel.hpp`.
 - WPT-style fetch test runner for official Web Platform Tests.
-- Dynamic function registry: register C++ functions from C++ and call them from JS via `call(name, ...args)`. Supports both sync (`Host::register_function`) and async (`Host::register_async_function`) handlers. Functions can also be registered globally (`Host::register_global_function`, `FunctionRegistry::register_global_function`) and are shared across all Host instances; the global registry is protected by a mutex so multiple Host instances can safely use it concurrently (`src/function_registry.hpp/.cpp`).
+- Dynamic function registry: register C++ functions from C++ and call them from JS via `call(name, ...args)`. Supports both sync (`Host::register_function`) and async (`Host::register_async_function`) handlers. Functions can also be registered globally (`Host::register_global_function`, `FunctionRegistry::register_global_function`) and are shared across all Host instances; the global registry is protected by a `std::shared_mutex` read-write lock so multiple Host instances can safely use it concurrently (`src/function_registry.hpp/.cpp`).
 - A unique ID per `Host` instance, defaulting to UUID v4; optionally supplied via `Host(std::string id)`. Exposed to JS as `globalThis.__hostID`.
 
 Planned (not yet implemented):
@@ -204,7 +204,7 @@ The runner starts `tests/wpt/node_test_server.mjs` as a network fixture, reads `
 ### Key abstractions
 
 - **`Host`** (`src/host.hpp`): owns `io_context`, QuickJS `Runtime`/`Context`, pending-op counter, and the main loop. Knows nothing about libcurl directly; it only keeps `next_fetch_id` and a map of in-flight `curl_http::Transfer*` pointers so that JS can abort a request by id. Provides `spawn_lazy`, `block_on`, `eval_source`, `eval_file`, and `async_sleep`.
-- **`FunctionRegistry`** (`src/function_registry.hpp/.cpp`): stores C++ functions callable from JS via `call(name, ...args)`. Each `Host` has a per-instance registry, and there is a separate global registry shared by all Host instances. The global registry is mutex-protected so multiple concurrent Host instances can safely register and call global functions.
+- **`FunctionRegistry`** (`src/function_registry.hpp/.cpp`): stores C++ functions callable from JS via `call(name, ...args)`. Each `Host` has a per-instance registry, and there is a separate global registry shared by all Host instances. The global registry is protected by a `std::shared_mutex` read-write lock so multiple concurrent Host instances can safely register and call global functions.
 - **`qjs::Value` / `qjs::Context`** (`src/qjs.hpp`): RAII wrappers and rquickjs-like binding helpers (`g.fn<&fn>("name")`, `g.obj("console", ...)`). Supports injecting `Host*` via context opaque.
 - **`curl_http::Client`** (`src/curl_runtime.hpp/.cpp`): owns one `curl_multi` handle, asio socket watches, and the timeout timer. A new `Client` is constructed for each fetch request, passed the `Host`'s `AsioExecutor`, and destroyed once the request finishes.
 - **`curl_http::Transfer`** (`src/curl_http.hpp`): represents one outbound HTTP request. Created per fetch call, added to its per-request `Client`, and deleted either by the Client's completion callback or by the JS abort path.
@@ -277,7 +277,7 @@ If you edit a `.js` file, you must rebuild for the `#embed` to pick up the new b
 - **Abort path ownership**: `Transfer` is deleted by `curl_http::Client::on_multi_messages` after `finish()`. The JS abort path must erase the transfer from `Host::fetch_transfers` before deleting it to avoid double-free.
 - **Per-request Client**: `fetch_api::async_fetch` constructs a fresh `curl_http::Client` for each call. This keeps `Host` curl-free but is less efficient than a shared multi-handle; it is acceptable for the current workload.
 - **Single-threaded assumption per Host**: each `Host`, `Client`, and its `io_context` are not thread-safe; JS and I/O callbacks for that instance run on a single thread. Multiple `Host` instances can exist concurrently, but each should be driven from its own thread or otherwise serialized. Do not call instance methods on a `Host` from a different thread than its event loop.
-- **Global registry thread-safety**: the global function registry (`Host::register_global_function`, `FunctionRegistry::register_global_function`) is mutex-protected, so multiple concurrent `Host` instances can safely register and call global functions. The per-instance registry is not locked; only access it from the owning `Host`'s thread.
+- **Global registry thread-safety**: the global function registry (`Host::register_global_function`, `FunctionRegistry::register_global_function`) is protected by a `std::shared_mutex` read-write lock, so multiple concurrent `Host` instances can safely register and call global functions. The per-instance registry is not locked; only access it from the owning `Host`'s thread.
 - **Pending ops**: async operations (timers, fetches) increment `pending_ops`. The event loop exits when `pending_ops == 0` and no JS jobs are pending. If a callback forgets to decrement, the loop will hang.
 
 ## Where to start

@@ -5,6 +5,7 @@
 #include <functional>
 #include <mutex>
 #include <optional>
+#include <shared_mutex>
 #include <string>
 #include <type_traits>
 #include <unordered_map>
@@ -194,7 +195,7 @@ struct FunctionRegistry {
       global_sync_functions;
   static inline std::unordered_map<std::string, AsyncFunction>
       global_async_functions;
-  static inline std::mutex global_mutex;
+  static inline std::shared_mutex global_mutex;
 
   // Low-level: store a hand-rolled adapter in this instance.
   void register_function(const std::string& name, SyncFunction fn);
@@ -226,7 +227,7 @@ struct FunctionRegistry {
   template <typename Fn>
     requires(!std::same_as<std::decay_t<Fn>, SyncFunction>)
   static void register_global_function(const std::string& name, Fn&& fn) {
-    std::lock_guard<std::mutex> lock(global_mutex);
+    std::unique_lock<std::shared_mutex> lock(global_mutex);
     global_sync_functions[name] =
         function_registry_detail::make_sync_wrapper(std::forward<Fn>(fn));
   }
@@ -234,7 +235,7 @@ struct FunctionRegistry {
   template <typename Fn>
     requires(!std::same_as<std::decay_t<Fn>, AsyncFunction>)
   static void register_global_async_function(const std::string& name, Fn&& fn) {
-    std::lock_guard<std::mutex> lock(global_mutex);
+    std::unique_lock<std::shared_mutex> lock(global_mutex);
     global_async_functions[name] =
         function_registry_detail::make_async_wrapper(std::forward<Fn>(fn));
   }

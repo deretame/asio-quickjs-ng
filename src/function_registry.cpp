@@ -65,18 +65,18 @@ void FunctionRegistry::register_async_function(const std::string& name,
 
 void FunctionRegistry::register_global_function(const std::string& name,
                                                  SyncFunction fn) {
-  std::lock_guard<std::mutex> lock(global_mutex);
+  std::unique_lock<std::shared_mutex> lock(global_mutex);
   global_sync_functions[name] = std::move(fn);
 }
 
 void FunctionRegistry::register_global_async_function(const std::string& name,
                                                        AsyncFunction fn) {
-  std::lock_guard<std::mutex> lock(global_mutex);
+  std::unique_lock<std::shared_mutex> lock(global_mutex);
   global_async_functions[name] = std::move(fn);
 }
 
 bool FunctionRegistry::has_function(const std::string& name) const {
-  std::lock_guard<std::mutex> lock(global_mutex);
+  std::shared_lock<std::shared_mutex> lock(global_mutex);
   return sync_functions.contains(name) || async_functions.contains(name) ||
          global_sync_functions.contains(name) ||
          global_async_functions.contains(name);
@@ -84,7 +84,7 @@ bool FunctionRegistry::has_function(const std::string& name) const {
 
 std::optional<SyncFunction> FunctionRegistry::find_sync_function(
     const std::string& name) {
-  std::lock_guard<std::mutex> lock(global_mutex);
+  std::shared_lock<std::shared_mutex> lock(global_mutex);
   auto it = sync_functions.find(name);
   if (it != sync_functions.end()) {
     return it->second;
@@ -98,7 +98,7 @@ std::optional<SyncFunction> FunctionRegistry::find_sync_function(
 
 std::optional<AsyncFunction> FunctionRegistry::find_async_function(
     const std::string& name) {
-  std::lock_guard<std::mutex> lock(global_mutex);
+  std::shared_lock<std::shared_mutex> lock(global_mutex);
   auto it = async_functions.find(name);
   if (it != async_functions.end()) {
     return it->second;
