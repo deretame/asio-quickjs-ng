@@ -483,14 +483,6 @@ struct fn_traits<Fn> {
   static constexpr bool ok = JsReturnType<R> && (JsArgType<Args> && ...);
 };
 
-template <typename R, typename... Args, R(*Fn)(Args...) noexcept>
-struct fn_traits<Fn> {
-  using return_type = R;
-  using args_tuple = std::tuple<Args...>;
-  static constexpr std::size_t arity = sizeof...(Args);
-  static constexpr bool ok = JsReturnType<R> && (JsArgType<Args> && ...);
-};
-
 // 兜底：非函数指针 / 无法解构时 ok = false
 template <auto Fn>
 struct fn_traits {

@@ -1,4 +1,10 @@
 {
+  "cmake.generator": "Ninja",
+  "cmake.configureSettings": {
+    "CMAKE_TOOLCHAIN_FILE": "${workspaceFolder}/vcpkg/scripts/buildsystems/vcpkg.cmake",
+    "VCPKG_TARGET_TRIPLET": "x64-windows-static",
+    "VCPKG_INSTALLED_DIR": "${workspaceFolder}/vcpkg_installed"
+  },
   "[cpp]": {
     "editor.formatOnSave": false,
     "editor.defaultFormatter": ""
@@ -6,5 +12,6 @@
   "[c]": {
     "editor.formatOnSave": false,
     "editor.defaultFormatter": ""
-  }
+  },
+  "clangd.path": "C:\\Program Files\\LLVM\\bin\\clangd.exe"
 }

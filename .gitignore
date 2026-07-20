@@ -2,3 +2,5 @@
 /build
 compile_commands.json
 .tools
+/vcpkg
+/vcpkg_installed

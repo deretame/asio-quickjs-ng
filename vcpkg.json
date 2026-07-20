@@ -1,0 +1,18 @@
+{
+  "name": "asio-quickjs-ng",
+  "version": "0.1.0",
+  "description": "Small C++23 runtime embedding QuickJS-NG and driving async I/O with asio",
+  "builtin-baseline": "dc8d75cfc3281b8e2a4ed8ee4163c891190df932",
+  "dependencies": [
+    "spdlog",
+    "asio",
+    "quickjs-ng",
+    "openssl",
+    "curl",
+    "async-simple",
+    "nlohmann-json",
+    "reflectcpp",
+    "boost-uuid",
+    "gtest"
+  ]
+}

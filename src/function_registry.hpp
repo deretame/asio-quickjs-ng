@@ -53,13 +53,7 @@ template <typename C, typename R, typename... Args>
 struct callable_traits<R (C::*)(Args...) const>
   : callable_traits_base<R, Args...> {};
 
-template <typename C, typename R, typename... Args>
-struct callable_traits<R (C::*)(Args...) noexcept>
-  : callable_traits_base<R, Args...> {};
-
-template <typename C, typename R, typename... Args>
-struct callable_traits<R (C::*)(Args...) const noexcept>
-  : callable_traits_base<R, Args...> {};
+// MSVC: omit noexcept specializations to avoid partial-ordering ambiguity.
 
 template <typename T>
 struct is_lazy : std::false_type {};
@@ -188,8 +182,8 @@ template <typename Tuple, typename R, typename Fn, std::size_t... I>
 async_simple::coro::Lazy<qjs::Value> invoke_async_impl(
   JSContext* ctx,
   Host* host,
-  Fn& fn,
-  const std::vector<qjs::Value>& args,
+  Fn fn,
+  std::vector<qjs::Value> args,
   std::index_sequence<I...> seq
 )
 {

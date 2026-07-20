@@ -9,6 +9,7 @@
 #include <utility>
 
 #include "curl_runtime.hpp"
+#include "js_embedded.hpp"
 
 namespace {
 
@@ -18,31 +19,7 @@ using curl_http::FetchOptions;
 using curl_http::FetchResult;
 using curl_http::HeaderPair;
 using curl_http::Transfer;
-
-constexpr unsigned char kJsAbortBytes[] = {
-#embed "js/abort.js"
-};
-constexpr unsigned char kJsTextEncodingPolyfillBytes[] = {
-#embed "js/text-encoding-polyfill.js"
-};
-constexpr unsigned char kJsWhatwgUrlPolyfillBytes[] = {
-#embed "js/whatwg-url-polyfill.js"
-};
-constexpr unsigned char kJsBodyPolyfillBytes[] = {
-#embed "js/body_polyfill.js"
-};
-constexpr unsigned char kJsHeadersBytes[] = {
-#embed "js/headers.js"
-};
-constexpr unsigned char kJsRequestBytes[] = {
-#embed "js/request.js"
-};
-constexpr unsigned char kJsResponseBytes[] = {
-#embed "js/response.js"
-};
-constexpr unsigned char kJsFetchBytes[] = {
-#embed "js/fetch.js"
-};
+using namespace js_embedded;
 
 struct EmbeddedJs {
   const char* name;

@@ -1,182 +1,50 @@
 cmake_minimum_required(VERSION 3.23)
+
+# Enforce the Ninja generator so build.ps1 and manual configure use the same backend.
+if(NOT CMAKE_GENERATOR MATCHES "Ninja")
+  message(FATAL_ERROR "This project requires the Ninja generator. Configure with: cmake -G Ninja ...")
+endif()
+
 project(asio_quickjs_ng LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
-include(FetchContent)
-
-# Header-only deps have no usable root CMakeLists; Populate is intentional.
-if(POLICY CMP0169)
-  cmake_policy(SET CMP0169 OLD)
-endif()
-
-# --- spdlog ---
-set(SPDLOG_BUILD_EXAMPLE OFF CACHE BOOL "" FORCE)
-set(SPDLOG_BUILD_TESTS OFF CACHE BOOL "" FORCE)
-set(SPDLOG_BUILD_BENCH OFF CACHE BOOL "" FORCE)
-set(SPDLOG_INSTALL OFF CACHE BOOL "" FORCE)
-FetchContent_Declare(
-  spdlog
-  GIT_REPOSITORY https://github.com/gabime/spdlog.git
-  GIT_TAG v1.15.3
-  GIT_SHALLOW TRUE
+# --- embedded JS polyfills: generate a header with byte arrays ---
+set(JS_EMBED_FILES
+  "${CMAKE_SOURCE_DIR}/src/js/abort.js"
+  "${CMAKE_SOURCE_DIR}/src/js/text-encoding-polyfill.js"
+  "${CMAKE_SOURCE_DIR}/src/js/whatwg-url-polyfill.js"
+  "${CMAKE_SOURCE_DIR}/src/js/body_polyfill.js"
+  "${CMAKE_SOURCE_DIR}/src/js/headers.js"
+  "${CMAKE_SOURCE_DIR}/src/js/request.js"
+  "${CMAKE_SOURCE_DIR}/src/js/response.js"
+  "${CMAKE_SOURCE_DIR}/src/js/fetch.js"
 )
+set(JS_EMBED_HEADER_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
+set(JS_EMBED_HEADER "${JS_EMBED_HEADER_DIR}/js_embedded.hpp")
 
-# --- asio (header-only) ---
-FetchContent_Declare(
-  asio
-  GIT_REPOSITORY https://github.com/chriskohlhoff/asio.git
-  GIT_TAG asio-1-38-2
-  GIT_SHALLOW TRUE
+add_custom_command(
+  OUTPUT "${JS_EMBED_HEADER}"
+  COMMAND ${CMAKE_COMMAND} -DOUTPUT_DIR="${JS_EMBED_HEADER_DIR}" -P "${CMAKE_SOURCE_DIR}/cmake/embed_js.cmake"
+  DEPENDS ${JS_EMBED_FILES}
+  COMMENT "Generating js_embedded.hpp"
 )
+add_custom_target(js_embedded_header DEPENDS "${JS_EMBED_HEADER}")
 
-# --- quickjs-ng ---
-set(QJS_ENABLE_INSTALL OFF CACHE BOOL "" FORCE)
-set(QJS_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
-FetchContent_Declare(
-  quickjs
-  GIT_REPOSITORY https://github.com/quickjs-ng/quickjs.git
-  GIT_TAG master
-  GIT_SHALLOW TRUE
-)
-
-# --- libressl (OpenSSL replacement, built from source) ---
-FetchContent_Declare(
-  libressl
-  URL https://ftp.openbsd.org/pub/OpenBSD/LibreSSL/libressl-4.3.2.tar.gz
-  URL_HASH SHA256=edf01aee24c65d69e6a9efcb9d44bcda682ff9d4f3bbbd95e794e1dfa90847b5
-  DOWNLOAD_EXTRACT_TIMESTAMP TRUE
-)
-
-# --- curl ---
-set(BUILD_CURL_EXE OFF CACHE BOOL "" FORCE)
-set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
-set(BUILD_STATIC_LIBS ON CACHE BOOL "" FORCE)
-set(BUILD_TESTING OFF CACHE BOOL "" FORCE)
-set(BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
-set(BUILD_LIBCURL_DOCS OFF CACHE BOOL "" FORCE)
-set(BUILD_MISC_DOCS OFF CACHE BOOL "" FORCE)
-set(ENABLE_CURL_MANUAL OFF CACHE BOOL "" FORCE)
-set(CURL_USE_LIBPSL OFF CACHE BOOL "" FORCE)
-set(CURL_USE_LIBSSH2 OFF CACHE BOOL "" FORCE)
-set(CURL_USE_OPENSSL ON CACHE BOOL "" FORCE)
-set(CURL_DISABLE_LDAP ON CACHE BOOL "" FORCE)
-set(CURL_DISABLE_LDAPS ON CACHE BOOL "" FORCE)
-set(CURL_ZLIB ON CACHE BOOL "" FORCE)
-FetchContent_Declare(
-  curl
-  GIT_REPOSITORY https://github.com/curl/curl.git
-  GIT_TAG curl-8_14_1
-  GIT_SHALLOW TRUE
-)
-
-# --- async_simple (headers only; skip broken optional submodules) ---
-FetchContent_Declare(
-  async_simple
-  GIT_REPOSITORY https://github.com/alibaba/async_simple.git
-  GIT_TAG 1.4
-  GIT_SHALLOW TRUE
-  GIT_SUBMODULES ""
-)
-
-# --- nlohmann/json (dynamic JSON DOM) ---
-set(JSON_BuildTests OFF CACHE BOOL "" FORCE)
-set(JSON_Install OFF CACHE BOOL "" FORCE)
-FetchContent_Declare(
-  nlohmann_json
-  GIT_REPOSITORY https://github.com/nlohmann/json.git
-  GIT_TAG v3.12.0
-  GIT_SHALLOW TRUE
-)
-
-# --- reflect-cpp (struct <-> JSON via reflection; bundles yyjson) ---
-set(REFLECTCPP_BUILD_TESTS OFF CACHE BOOL "" FORCE)
-set(REFLECTCPP_BUILD_BENCHMARKS OFF CACHE BOOL "" FORCE)
-set(REFLECTCPP_INSTALL OFF CACHE BOOL "" FORCE)
-set(REFLECTCPP_USE_VCPKG OFF CACHE BOOL "" FORCE)
-set(REFLECTCPP_USE_BUNDLED_DEPENDENCIES ON CACHE BOOL "" FORCE)
-set(REFLECTCPP_JSON ON CACHE BOOL "" FORCE)
-set(REFLECTCPP_BUILD_SHARED OFF CACHE BOOL "" FORCE)
-FetchContent_Declare(
-  reflectcpp
-  GIT_REPOSITORY https://github.com/getml/reflect-cpp.git
-  GIT_TAG v0.25.0
-  GIT_SHALLOW TRUE
-)
-
-# --- boost (header-only; used for uuid) ---
-FetchContent_Declare(
-  boost
-  URL https://archives.boost.io/release/1.87.0/source/boost_1_87_0.tar.gz
-  URL_HASH SHA256=f55c340aa49763b1925ccf02b2e83f35fdcf634c9d5164a2acb87540173c741d
-)
-
-# Build LibreSSL first so curl's find_package(OpenSSL) can locate it.
-FetchContent_GetProperties(libressl)
-if(NOT libressl_POPULATED)
-  FetchContent_Populate(libressl)
-endif()
-set(LIBRESSL_INSTALL_DIR "${CMAKE_BINARY_DIR}/libressl-install")
-if(NOT EXISTS "${LIBRESSL_INSTALL_DIR}/lib/libssl.a"
-   OR NOT EXISTS "${LIBRESSL_INSTALL_DIR}/lib/libcrypto.a")
-  message(STATUS "LibreSSL not built yet; configuring and building from source...")
-  execute_process(
-    COMMAND ${CMAKE_COMMAND}
-      -S "${libressl_SOURCE_DIR}"
-      -B "${libressl_BINARY_DIR}"
-      -G "${CMAKE_GENERATOR}"
-      -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
-      -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
-      -DCMAKE_INSTALL_PREFIX=${LIBRESSL_INSTALL_DIR}
-      -DCMAKE_INSTALL_LIBDIR=lib
-      -DLIBRESSL_APPS=OFF
-      -DLIBRESSL_TESTS=OFF
-      -DENABLE_NC=OFF
-      -DBUILD_SHARED_LIBS=OFF
-    RESULT_VARIABLE _libressl_configure_result
-  )
-  if(NOT _libressl_configure_result EQUAL 0)
-    message(FATAL_ERROR "LibreSSL configure failed")
-  endif()
-  execute_process(
-    COMMAND ${CMAKE_COMMAND} --build "${libressl_BINARY_DIR}" --target install -j
-    RESULT_VARIABLE _libressl_build_result
-  )
-  if(NOT _libressl_build_result EQUAL 0)
-    message(FATAL_ERROR "LibreSSL build failed")
-  endif()
-endif()
-set(LIBRESSL_INSTALL_DIR "${LIBRESSL_INSTALL_DIR}" CACHE INTERNAL "LibreSSL install prefix")
-set(OPENSSL_USE_STATIC_LIBS ON CACHE BOOL "" FORCE)
-set(OPENSSL_ROOT_DIR "${LIBRESSL_INSTALL_DIR}" CACHE PATH "" FORCE)
-list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")
-
-FetchContent_MakeAvailable(spdlog quickjs curl nlohmann_json reflectcpp boost)
-
-FetchContent_GetProperties(asio)
-if(NOT asio_POPULATED)
-  FetchContent_Populate(asio)
-endif()
-add_library(asio_header INTERFACE)
-target_include_directories(asio_header INTERFACE "${asio_SOURCE_DIR}/include")
-target_compile_definitions(asio_header INTERFACE
-  ASIO_STANDALONE
-  ASIO_NO_DEPRECATED
-)
-
-FetchContent_GetProperties(async_simple)
-if(NOT async_simple_POPULATED)
-  FetchContent_Populate(async_simple)
-endif()
-add_library(async_simple_headers INTERFACE)
-target_include_directories(async_simple_headers INTERFACE "${async_simple_SOURCE_DIR}")
-target_compile_definitions(async_simple_headers INTERFACE ASYNC_SIMPLE_HAS_NOT_AIO)
-
-add_library(boost_headers INTERFACE)
-target_include_directories(boost_headers INTERFACE "${boost_SOURCE_DIR}")
+# --- dependencies via vcpkg ---
+find_package(spdlog CONFIG REQUIRED)
+find_package(asio CONFIG REQUIRED)
+find_package(qjs CONFIG REQUIRED)
+find_package(OpenSSL REQUIRED)
+find_package(CURL REQUIRED)
+find_package(async_simple CONFIG REQUIRED)
+find_package(nlohmann_json CONFIG REQUIRED)
+find_package(reflectcpp CONFIG REQUIRED)
+find_package(Boost REQUIRED COMPONENTS uuid)
 
 # --- core library (host + fetch layers) ---
 add_library(asio_qjs_core
@@ -185,20 +53,23 @@ add_library(asio_qjs_core
   src/fetch.cpp
   src/function_registry.cpp
 )
-target_include_directories(asio_qjs_core PUBLIC "${CMAKE_SOURCE_DIR}/src")
+target_include_directories(asio_qjs_core PUBLIC "${CMAKE_SOURCE_DIR}/src" PRIVATE "${JS_EMBED_HEADER_DIR}")
 target_compile_definitions(asio_qjs_core PUBLIC
   CURL_STATICLIB
   _WIN32_WINNT=0x0A00
+  NOMINMAX
 )
 target_link_libraries(asio_qjs_core PUBLIC
-  asio_header
+  asio::asio
   qjs
   CURL::libcurl
+  OpenSSL::SSL
+  OpenSSL::Crypto
   spdlog::spdlog
-  async_simple_headers
+  async_simple::async_simple_header_only
   nlohmann_json::nlohmann_json
   reflectcpp::reflectcpp
-  boost_headers
+  Boost::uuid
 )
 if(WIN32)
   target_link_libraries(asio_qjs_core PUBLIC
@@ -213,35 +84,25 @@ endif()
 if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
   target_compile_options(asio_qjs_core PRIVATE -Wall -Wextra -fcoroutines
     -Wno-maybe-uninitialized)
-  # fetch.cpp uses #embed (C23 / Clang); silence pedantic noise
-  set_source_files_properties(src/fetch.cpp PROPERTIES
-    COMPILE_OPTIONS "-Wno-c23-extensions")
+elseif(CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
+  target_compile_options(asio_qjs_core PRIVATE /W3 /permissive-)
 endif()
-set_source_files_properties(src/fetch.cpp PROPERTIES
-  OBJECT_DEPENDS
-    "${CMAKE_SOURCE_DIR}/src/js/abort.js;${CMAKE_SOURCE_DIR}/src/js/text-encoding-polyfill.js;${CMAKE_SOURCE_DIR}/src/js/whatwg-url-polyfill.js;${CMAKE_SOURCE_DIR}/src/js/body_polyfill.js;${CMAKE_SOURCE_DIR}/src/js/headers.js;${CMAKE_SOURCE_DIR}/src/js/request.js;${CMAKE_SOURCE_DIR}/src/js/response.js;${CMAKE_SOURCE_DIR}/src/js/fetch.js"
-)
+add_dependencies(asio_qjs_core js_embedded_header)
 
 add_executable(asio_qjs src/main.cpp)
 target_link_libraries(asio_qjs PRIVATE asio_qjs_core)
 if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
   target_compile_options(asio_qjs PRIVATE -Wall -Wextra -fcoroutines
     -Wno-maybe-uninitialized)
+elseif(CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
+  target_compile_options(asio_qjs PRIVATE /W3 /permissive-)
 endif()
 
 # --- tests (gtest) ---
 option(ASIO_QJS_BUILD_TESTS "Build unit tests" ON)
 if(ASIO_QJS_BUILD_TESTS)
   enable_testing()
-  set(BUILD_GMOCK OFF CACHE BOOL "" FORCE)
-  set(INSTALL_GTEST OFF CACHE BOOL "" FORCE)
-  FetchContent_Declare(
-    googletest
-    GIT_REPOSITORY https://github.com/google/googletest.git
-    GIT_TAG v1.17.0
-    GIT_SHALLOW TRUE
-  )
-  FetchContent_MakeAvailable(googletest)
+  find_package(GTest CONFIG REQUIRED)
   include(GoogleTest)
 
   function(add_qjs_gtest name)
@@ -253,6 +114,8 @@ if(ASIO_QJS_BUILD_TESTS)
     if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
       target_compile_options(${name} PRIVATE -Wall -Wextra -fcoroutines -O2
         -Wno-maybe-uninitialized)
+    elseif(CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
+      target_compile_options(${name} PRIVATE /W3 /permissive-)
     endif()
     gtest_discover_tests(${name}
       PROPERTIES
@@ -275,6 +138,8 @@ if(ASIO_QJS_BUILD_TESTS)
   if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
     target_compile_options(test_wpt_fetch PRIVATE -Wall -Wextra -fcoroutines -O2
       -Wno-maybe-uninitialized)
+  elseif(CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
+    target_compile_options(test_wpt_fetch PRIVATE /W3 /permissive-)
   endif()
   gtest_discover_tests(test_wpt_fetch PROPERTIES TIMEOUT 120)
 endif()
