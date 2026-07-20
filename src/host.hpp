@@ -83,6 +83,27 @@ struct Host {
     registry.register_async_function(name, std::forward<Fn>(fn));
   }
 
+  // Global registration: functions registered here are visible to all Host
+  // instances, even if registered while a Host is already running.
+  static void register_global_function(const std::string& name,
+                                       SyncFunction fn);
+  static void register_global_async_function(const std::string& name,
+                                              AsyncFunction fn);
+
+  template <typename Fn>
+    requires(!std::same_as<std::decay_t<Fn>, SyncFunction>)
+  static void register_global_function(const std::string& name, Fn&& fn) {
+    FunctionRegistry::register_global_function(name, std::forward<Fn>(fn));
+  }
+
+  template <typename Fn>
+    requires(!std::same_as<std::decay_t<Fn>, AsyncFunction>)
+  static void register_global_async_function(const std::string& name,
+                                              Fn&& fn) {
+    FunctionRegistry::register_global_async_function(name,
+                                                        std::forward<Fn>(fn));
+  }
+
   [[noreturn]] void throw_type_error(const char* msg);
   [[noreturn]] void throw_internal_error(const char* msg);
 

@@ -146,3 +146,111 @@ TEST(FunctionRegistry, AsyncCallRejectsOnException) {
   ASSERT_FALSE(err.is_undefined());
   EXPECT_EQ(js_str(err.get("message")), "boom from async");
 }
+
+TEST(FunctionRegistry, GlobalSyncCall) {
+  Host::register_global_function(
+      "globalAdd",
+      [](int32_t a, int32_t b) -> int32_t { return a + b; });
+
+  Host host;
+  ASSERT_TRUE(setup_host(host));
+
+  ASSERT_TRUE(host.eval_source(
+      R"JS(
+        globalThis.__globalSyncResult = call("globalAdd", 10, 20);
+      )JS",
+      "global_sync_call.js"));
+
+  int32_t value = 0;
+  ASSERT_TRUE(host.global().get("__globalSyncResult").to_int32(value));
+  EXPECT_EQ(value, 30);
+}
+
+TEST(FunctionRegistry, GlobalSyncCallSharedByTwoHosts) {
+  FunctionRegistry::register_global_function(
+      "sharedMul",
+      [](int32_t a, int32_t b) -> int32_t { return a * b; });
+
+  Host host1;
+  Host host2;
+  ASSERT_TRUE(setup_host(host1));
+  ASSERT_TRUE(setup_host(host2));
+
+  ASSERT_TRUE(host1.eval_source(
+      R"JS(globalThis.__r1 = call("sharedMul", 3, 4);)JS", "host1.js"));
+  ASSERT_TRUE(host2.eval_source(
+      R"JS(globalThis.__r2 = call("sharedMul", 5, 6);)JS", "host2.js"));
+
+  int32_t r1 = 0;
+  int32_t r2 = 0;
+  ASSERT_TRUE(host1.global().get("__r1").to_int32(r1));
+  ASSERT_TRUE(host2.global().get("__r2").to_int32(r2));
+  EXPECT_EQ(r1, 12);
+  EXPECT_EQ(r2, 30);
+}
+
+TEST(FunctionRegistry, GlobalAsyncCall) {
+  Host::register_global_async_function(
+      "globalAsyncAdd",
+      [](int32_t a, int32_t b) -> async_simple::coro::Lazy<int32_t> {
+        co_return a + b;
+      });
+
+  Host host;
+  ASSERT_TRUE(setup_host(host));
+
+  ASSERT_TRUE(host.eval_source(
+      R"JS(
+        globalThis.__globalAsyncResult = null;
+        globalThis.__globalAsyncDone = false;
+        (async () => {
+          globalThis.__globalAsyncResult = await call("globalAsyncAdd", 7, 8);
+        })().then(() => { globalThis.__globalAsyncDone = true; });
+      )JS",
+      "global_async_call.js"));
+
+  host.run_loop();
+
+  EXPECT_TRUE(
+      JS_ToBool(host.js_raw(), host.global().get("__globalAsyncDone").raw()))
+      << "global async call did not complete";
+
+  int32_t value = 0;
+  ASSERT_TRUE(host.global().get("__globalAsyncResult").to_int32(value));
+  EXPECT_EQ(value, 15);
+}
+
+TEST(FunctionRegistry, GlobalRegistrationAfterHostStarted) {
+  Host host;
+  ASSERT_TRUE(setup_host(host));
+
+  Host::register_global_function(
+      "lateAdd",
+      [](int32_t a, int32_t b) -> int32_t { return a + b; });
+
+  ASSERT_TRUE(host.eval_source(
+      R"JS(globalThis.__lateResult = call("lateAdd", 1, 2);)JS",
+      "late_add.js"));
+
+  int32_t value = 0;
+  ASSERT_TRUE(host.global().get("__lateResult").to_int32(value));
+  EXPECT_EQ(value, 3);
+}
+
+TEST(FunctionRegistry, GlobalBigIntReturn) {
+  Host::register_global_function(
+      "bigIntFn", []() -> int64_t { return 9007199254740993LL; });
+
+  Host host;
+  ASSERT_TRUE(setup_host(host));
+
+  ASSERT_TRUE(host.eval_source(
+      R"JS(
+        globalThis.__bigIntResult = call("bigIntFn");
+        globalThis.__isBigInt = typeof globalThis.__bigIntResult === 'bigint';
+      )JS",
+      "bigint_return.js"));
+
+  EXPECT_TRUE(
+      JS_ToBool(host.js_raw(), host.global().get("__isBigInt").raw()));
+}

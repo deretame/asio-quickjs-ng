@@ -91,6 +91,15 @@ void Host::register_async_function(const std::string& name, AsyncFunction fn) {
   registry.register_async_function(name, std::move(fn));
 }
 
+void Host::register_global_function(const std::string& name, SyncFunction fn) {
+  FunctionRegistry::register_global_function(name, std::move(fn));
+}
+
+void Host::register_global_async_function(const std::string& name,
+                                           AsyncFunction fn) {
+  FunctionRegistry::register_global_async_function(name, std::move(fn));
+}
+
 void Host::shutdown() { stopping = true; }
 
 void Host::throw_type_error(const char* msg) {

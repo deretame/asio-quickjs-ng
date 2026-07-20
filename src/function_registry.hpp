@@ -87,10 +87,16 @@ qjs::Value to_value(JSContext* ctx, R&& r) {
                        std::same_as<T, const char*>) {
     std::string_view s = r;
     return qjs::Value::take(ctx, JS_NewStringLen(ctx, s.data(), s.size()));
-  } else if constexpr (std::same_as<T, int32_t>) {
-    return qjs::Value::take(ctx, JS_NewInt32(ctx, r));
   } else if constexpr (std::same_as<T, bool>) {
     return qjs::Value::take(ctx, JS_NewBool(ctx, r));
+  } else if constexpr (std::floating_point<T>) {
+    return qjs::Value::take(ctx, JS_NewFloat64(ctx, static_cast<double>(r)));
+  } else if constexpr (std::same_as<T, int32_t>) {
+    return qjs::Value::take(ctx, JS_NewInt32(ctx, r));
+  } else if constexpr (std::same_as<T, uint32_t>) {
+    return qjs::Value::take(ctx, JS_NewInt64(ctx, static_cast<int64_t>(r)));
+  } else if constexpr (std::same_as<T, int64_t>) {
+    return qjs::Value::take(ctx, JS_NewBigInt64(ctx, r));
   } else {
     static_assert(std::false_type::value, "unsupported return type");
   }
@@ -174,12 +180,26 @@ auto make_async_wrapper(Fn&& fn) {
 }  // namespace function_registry_detail
 
 struct FunctionRegistry {
+  // Per-instance functions.
   std::unordered_map<std::string, SyncFunction> sync_functions;
   std::unordered_map<std::string, AsyncFunction> async_functions;
 
-  // Low-level: store a hand-rolled adapter.
+  // Global functions shared by every Host.  Registered before or while Hosts
+  // are running; looked up as a fallback when an instance has no matching name.
+  static inline std::unordered_map<std::string, SyncFunction>
+      global_sync_functions;
+  static inline std::unordered_map<std::string, AsyncFunction>
+      global_async_functions;
+
+  // Low-level: store a hand-rolled adapter in this instance.
   void register_function(const std::string& name, SyncFunction fn);
   void register_async_function(const std::string& name, AsyncFunction fn);
+
+  // Low-level: store a hand-rolled adapter in the global registry.
+  static void register_global_function(const std::string& name,
+                                        SyncFunction fn);
+  static void register_global_async_function(const std::string& name,
+                                              AsyncFunction fn);
 
   // Trampoline-style: auto-convert JS args to C++ types and return values back
   // to JS. Sync callback signature: R(Args...). Async callback signature:
@@ -198,7 +218,25 @@ struct FunctionRegistry {
         function_registry_detail::make_async_wrapper(std::forward<Fn>(fn));
   }
 
+  template <typename Fn>
+    requires(!std::same_as<std::decay_t<Fn>, SyncFunction>)
+  static void register_global_function(const std::string& name, Fn&& fn) {
+    global_sync_functions[name] =
+        function_registry_detail::make_sync_wrapper(std::forward<Fn>(fn));
+  }
+
+  template <typename Fn>
+    requires(!std::same_as<std::decay_t<Fn>, AsyncFunction>)
+  static void register_global_async_function(const std::string& name, Fn&& fn) {
+    global_async_functions[name] =
+        function_registry_detail::make_async_wrapper(std::forward<Fn>(fn));
+  }
+
   bool has_function(const std::string& name) const;
+
+  // Lookup helpers: instance wins over global.
+  SyncFunction* find_sync_function(const std::string& name);
+  AsyncFunction* find_async_function(const std::string& name);
 };
 
 // JS native: call(name, ...args)
