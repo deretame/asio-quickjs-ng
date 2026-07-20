@@ -136,7 +136,7 @@ JSValue native_call(JSContext* ctx, JSValueConst /*this_val*/, int argc,
       owned_args.push_back(qjs::Value::dup(ctx, argv[i]));
     }
     try {
-      qjs::Value result = (*sync_fn)(qjs::Ctx{ctx}, owned_args);
+      qjs::Value result = (*sync_fn)(qjs::Ctx{ctx}, host, owned_args);
       return result.release();
     } catch (const qjs::detail::ConvertError&) {
       return JS_EXCEPTION;
@@ -158,7 +158,7 @@ JSValue native_call(JSContext* ctx, JSValueConst /*this_val*/, int argc,
       return JS_EXCEPTION;
     }
 
-    auto lazy = (*async_fn)(qjs::Ctx{ctx}, owned_args);
+    auto lazy = (*async_fn)(qjs::Ctx{ctx}, host, owned_args);
     ++host->pending_ops;
     host->spawn_lazy(handle_async_call(
         std::move(cap->resolve), std::move(cap->reject), std::move(lazy)));

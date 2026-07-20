@@ -5,6 +5,7 @@
 #include <chrono>
 #include <stdexcept>
 #include <string>
+#include <unordered_map>
 
 #include "function_registry.hpp"
 #include "host.hpp"
@@ -253,4 +254,64 @@ TEST(FunctionRegistry, GlobalBigIntReturn) {
 
   EXPECT_TRUE(
       JS_ToBool(host.js_raw(), host.global().get("__isBigInt").raw()));
+}
+
+TEST(FunctionRegistry, HostIdDataIsolation) {
+  static std::unordered_map<std::string, int32_t> host_data;
+  host_data.clear();
+
+  Host::register_global_function(
+      "incrementAndGet", [](Host* host) -> int32_t {
+        return ++host_data[std::string(host->id())];
+      });
+
+  Host host1("host-a");
+  Host host2("host-b");
+  ASSERT_TRUE(setup_host(host1));
+  ASSERT_TRUE(setup_host(host2));
+
+  ASSERT_TRUE(host1.eval_source(
+      R"JS(globalThis.__c1a = call("incrementAndGet");)JS", "h1a.js"));
+  ASSERT_TRUE(host1.eval_source(
+      R"JS(globalThis.__c1b = call("incrementAndGet");)JS", "h1b.js"));
+  ASSERT_TRUE(host2.eval_source(
+      R"JS(globalThis.__c2a = call("incrementAndGet");)JS", "h2a.js"));
+
+  int32_t c1a = 0;
+  int32_t c1b = 0;
+  int32_t c2a = 0;
+  ASSERT_TRUE(host1.global().get("__c1a").to_int32(c1a));
+  ASSERT_TRUE(host1.global().get("__c1b").to_int32(c1b));
+  ASSERT_TRUE(host2.global().get("__c2a").to_int32(c2a));
+  EXPECT_EQ(c1a, 1);
+  EXPECT_EQ(c1b, 2);
+  EXPECT_EQ(c2a, 1);
+}
+
+TEST(FunctionRegistry, AsyncHostId) {
+  Host::register_global_async_function(
+      "asyncHostId",
+      [](Host* host) -> async_simple::coro::Lazy<std::string> {
+        co_return host->id();
+      });
+
+  Host host("async-host");
+  ASSERT_TRUE(setup_host(host));
+
+  ASSERT_TRUE(host.eval_source(
+      R"JS(
+        globalThis.__asyncHostId = null;
+        globalThis.__asyncHostIdDone = false;
+        (async () => {
+          globalThis.__asyncHostId = await call("asyncHostId");
+        })().then(() => { globalThis.__asyncHostIdDone = true; });
+      )JS",
+      "async_host_id.js"));
+
+  host.run_loop();
+
+  EXPECT_TRUE(
+      JS_ToBool(host.js_raw(), host.global().get("__asyncHostIdDone").raw()))
+      << "async host id call did not complete";
+  EXPECT_EQ(js_str(host.global().get("__asyncHostId")), "async-host");
 }
