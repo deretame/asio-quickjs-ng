@@ -84,17 +84,17 @@ template <channel_value T>
 class Sender {
 public:
 Sender() = default;
-explicit Sender(std::shared_ptr<detail::mpsc_state<T> > s)
+explicit Sender(std::shared_ptr<detail::mpsc_state<T>> s)
   : state_(std::move(s)) {}
 
-Sender(const Sender &o) : state_(o.state_)
+Sender(const Sender& o) : state_(o.state_)
 {
   if (state_) {
     ++state_->senders;
   }
 }
 
-Sender& operator=(const Sender &o)
+Sender& operator=(const Sender& o)
 {
   if (this == &o) {
     return *this;
@@ -107,9 +107,9 @@ Sender& operator=(const Sender &o)
   return *this;
 }
 
-Sender(Sender &&o) noexcept : state_(std::move(o.state_)) {}
+Sender(Sender&& o) noexcept : state_(std::move(o.state_)) {}
 
-Sender& operator=(Sender &&o) noexcept
+Sender& operator=(Sender&& o) noexcept
 {
   if (this == &o) {
     return *this;
@@ -156,22 +156,22 @@ void release()
   state_.reset();
 }
 
-std::shared_ptr<detail::mpsc_state<T> > state_;
+std::shared_ptr<detail::mpsc_state<T>> state_;
 };
 
 template <channel_value T>
 class Receiver {
 public:
 Receiver() = default;
-explicit Receiver(std::shared_ptr<detail::mpsc_state<T> > s)
+explicit Receiver(std::shared_ptr<detail::mpsc_state<T>> s)
   : state_(std::move(s)) {}
 
-Receiver(const Receiver &) = delete;
-Receiver& operator=(const Receiver &) = delete;
+Receiver(const Receiver&) = delete;
+Receiver& operator=(const Receiver&) = delete;
 
-Receiver(Receiver &&o) noexcept : state_(std::move(o.state_)) {}
+Receiver(Receiver&& o) noexcept : state_(std::move(o.state_)) {}
 
-Receiver& operator=(Receiver &&o) noexcept
+Receiver& operator=(Receiver&& o) noexcept
 {
   if (this != &o) {
     close_rx();
@@ -190,7 +190,7 @@ explicit operator bool() const {
 auto recv()
 {
   struct Awaiter {
-    detail::mpsc_state<T> *st;
+    detail::mpsc_state<T>* st;
 
     bool await_ready() const { return !st->queue.empty() || st->closed; }
 
@@ -231,7 +231,7 @@ void close_rx()
   }
 }
 
-std::shared_ptr<detail::mpsc_state<T> > state_;
+std::shared_ptr<detail::mpsc_state<T>> state_;
 };
 
 template <channel_value T>
@@ -243,7 +243,7 @@ struct Pair {
 template <channel_value T>
 Pair<T> unbounded()
 {
-  auto st = std::make_shared<detail::mpsc_state<T> >();
+  auto st = std::make_shared<detail::mpsc_state<T>>();
   return {Sender<T>{st}, Receiver<T>{st}};
 }
 
@@ -261,14 +261,14 @@ template <channel_value T>
 class Sender {
 public:
 Sender() = default;
-explicit Sender(std::shared_ptr<detail::oneshot_state<T> > s)
+explicit Sender(std::shared_ptr<detail::oneshot_state<T>> s)
   : state_(std::move(s)) {}
 
-Sender(const Sender &) = delete;
-Sender& operator=(const Sender &) = delete;
-Sender(Sender &&o) noexcept : state_(std::move(o.state_)) {}
+Sender(const Sender&) = delete;
+Sender& operator=(const Sender&) = delete;
+Sender(Sender&& o) noexcept : state_(std::move(o.state_)) {}
 
-Sender& operator=(Sender &&o) noexcept
+Sender& operator=(Sender&& o) noexcept
 {
   if (this != &o) {
     close();
@@ -308,20 +308,20 @@ void close()
 }
 
 private:
-std::shared_ptr<detail::oneshot_state<T> > state_;
+std::shared_ptr<detail::oneshot_state<T>> state_;
 };
 
 template <channel_value T>
 class Receiver {
 public:
 Receiver() = default;
-explicit Receiver(std::shared_ptr<detail::oneshot_state<T> > s)
+explicit Receiver(std::shared_ptr<detail::oneshot_state<T>> s)
   : state_(std::move(s)) {}
 
-Receiver(const Receiver &) = delete;
-Receiver& operator=(const Receiver &) = delete;
-Receiver(Receiver &&) noexcept = default;
-Receiver& operator=(Receiver &&) noexcept = default;
+Receiver(const Receiver&) = delete;
+Receiver& operator=(const Receiver&) = delete;
+Receiver(Receiver&&) noexcept = default;
+Receiver& operator=(Receiver&&) noexcept = default;
 
 explicit operator bool() const {
   return static_cast<bool>(state_);
@@ -330,7 +330,7 @@ explicit operator bool() const {
 auto recv()
 {
   struct Awaiter {
-    detail::oneshot_state<T> *st;
+    detail::oneshot_state<T>* st;
 
     bool await_ready() const { return st->sent || st->closed; }
 
@@ -353,7 +353,7 @@ auto recv()
 bool is_ready() const { return state_ && (state_->sent || state_->closed); }
 
 private:
-std::shared_ptr<detail::oneshot_state<T> > state_;
+std::shared_ptr<detail::oneshot_state<T>> state_;
 };
 
 template <channel_value T>
@@ -365,7 +365,7 @@ struct Pair {
 template <channel_value T>
 Pair<T> channel()
 {
-  auto st = std::make_shared<detail::oneshot_state<T> >();
+  auto st = std::make_shared<detail::oneshot_state<T>>();
   return {Sender<T>{st}, Receiver<T>{st}};
 }
 

@@ -13,14 +13,14 @@ Global g_curl_global;
 }  // namespace
 
 struct CurlWatch : std::enable_shared_from_this<CurlWatch> {
-  Client *client = nullptr;
+  Client* client = nullptr;
   curl_socket_t fd = CURL_SOCKET_BAD;
   asio::ip::tcp::socket sock;
   int action = 0;
   bool read_armed = false;
   bool write_armed = false;
 
-  explicit CurlWatch(Client *r, curl_socket_t s)
+  explicit CurlWatch(Client* r, curl_socket_t s)
     : client(r), fd(s), sock(r->ioc_) {}
 
   bool alive() const
@@ -64,11 +64,11 @@ private:
   void arm_dir(
     int poll_bit,
     int ev_bit,
-    bool & /*armed*/,
+    bool& /*armed*/,
     asio::ip::tcp::socket::wait_type wait
 )
   {
-    bool &flag = (poll_bit == CURL_POLL_IN) ? read_armed : write_armed;
+    bool& flag = (poll_bit == CURL_POLL_IN) ? read_armed : write_armed;
     if (!(action & poll_bit) || flag) {
       return;
     }
@@ -76,8 +76,8 @@ private:
     auto self = shared_from_this();
     sock.async_wait(
       wait,
-      [self, poll_bit, ev_bit](const asio::error_code &ec) {
-        bool &armed =
+      [self, poll_bit, ev_bit](const asio::error_code& ec) {
+        bool& armed =
         (poll_bit == CURL_POLL_IN) ? self->read_armed : self->write_armed;
         armed = false;
         if (ec || self->client->stopping_) {
@@ -95,15 +95,15 @@ private:
 };
 
 int curl_socket_callback(
-  CURL * /*easy*/,
+  CURL* /*easy*/,
   curl_socket_t s,
   int what,
-  void *userp,
-  void *socketp
+  void* userp,
+  void* socketp
 )
 {
-  auto *client = static_cast<Client *>(userp);
-  auto *old = static_cast<CurlWatch *>(socketp);
+  auto* client = static_cast<Client*>(userp);
+  auto* old = static_cast<CurlWatch*>(socketp);
 
   if (what == CURL_POLL_REMOVE) {
     if (old) {
@@ -135,16 +135,16 @@ int curl_socket_callback(
   return 0;
 }
 
-int curl_timer_callback(CURLM * /*multi*/, long timeout_ms, void *userp)
+int curl_timer_callback(CURLM* /*multi*/, long timeout_ms, void* userp)
 {
-  auto *client = static_cast<Client *>(userp);
+  auto* client = static_cast<Client*>(userp);
   client->arm_timer(timeout_ms);
   return 0;
 }
 
-Client::Client(AsioExecutor &ex)
+Client::Client(AsioExecutor& ex)
   : ex_(ex),
-  ioc_(*static_cast<asio::io_context *>(ex.checkout())),
+  ioc_(*static_cast<asio::io_context*>(ex.checkout())),
   timer_(ioc_)
 {
   multi_.set_socket_function(curl_socket_callback, this);
@@ -161,7 +161,7 @@ void Client::arm_timer(long timeout_ms)
   }
   timer_.expires_after(std::chrono::milliseconds(timeout_ms));
   timer_.async_wait(
-    [self = shared_from_this()](const asio::error_code &err) {
+    [self = shared_from_this()](const asio::error_code& err) {
       if (err || self->stopping_) {
         return;
       }
@@ -185,13 +185,13 @@ void Client::on_socket_action(curl_socket_t fd, int ev_bitmask)
 void Client::on_multi_messages()
 {
   int msgs = 0;
-  while (CURLMsg *msg = multi_.info_read(&msgs)) {
+  while (CURLMsg* msg = multi_.info_read(&msgs)) {
     if (msg->msg != CURLMSG_DONE) {
       continue;
     }
-    char *private_ptr = nullptr;
+    char* private_ptr = nullptr;
     curl_easy_getinfo(msg->easy_handle, CURLINFO_PRIVATE, &private_ptr);
-    auto *tr = reinterpret_cast<Transfer *>(private_ptr);
+    auto* tr = reinterpret_cast<Transfer*>(private_ptr);
     if (!tr) {
       continue;
     }
@@ -203,7 +203,7 @@ void Client::on_multi_messages()
   }
 }
 
-bool Client::add_transfer(Transfer *tr)
+bool Client::add_transfer(Transfer* tr)
 {
   if (!tr || !tr->easy) {
     return false;
@@ -216,7 +216,7 @@ bool Client::add_transfer(Transfer *tr)
   return true;
 }
 
-void Client::remove_transfer(Transfer *tr)
+void Client::remove_transfer(Transfer* tr)
 {
   if (tr && tr->easy) {
     multi_.remove(tr->easy.get());
@@ -229,7 +229,7 @@ void Client::shutdown()
 {
   stopping_ = true;
   timer_.cancel();
-  for (auto &kv : watches_) {
+  for (auto& kv : watches_) {
     kv.second->dispose();
   }
   watches_.clear();
@@ -238,25 +238,25 @@ void Client::shutdown()
 // Transfer method implementations (moved here because they need Client).
 
 size_t Transfer::write_cb(
-  char *ptr,
+  char* ptr,
   size_t size,
   size_t nmemb,
-  void *userdata
+  void* userdata
 )
 {
-  auto *self = static_cast<Transfer *>(userdata);
+  auto* self = static_cast<Transfer*>(userdata);
   self->body.append(ptr, size * nmemb);
   return size * nmemb;
 }
 
 size_t Transfer::header_cb(
-  char *ptr,
+  char* ptr,
   size_t size,
   size_t nmemb,
-  void *userdata
+  void* userdata
 )
 {
-  auto *self = static_cast<Transfer *>(userdata);
+  auto* self = static_cast<Transfer*>(userdata);
   const size_t n = size * nmemb;
   std::string line(ptr, n);
   while (!line.empty() && (line.back() == '\n' || line.back() == '\r')) {
@@ -284,8 +284,8 @@ size_t Transfer::header_cb(
   HeaderPair hp;
   hp.name = line.substr(0, colon);
   hp.value = line.substr(colon + 1);
-  while (!hp.value.empty()
-    && (hp.value.front() == ' ' || hp.value.front() == '\t')) {
+  while (!hp.value.empty() &&
+    (hp.value.front() == ' ' || hp.value.front() == '\t')) {
     hp.value.erase(hp.value.begin());
   }
   self->response_headers.push_back(std::move(hp));
@@ -371,7 +371,7 @@ bool Transfer::start()
     }
   }
 
-  for (const auto &h : options.headers) {
+  for (const auto& h : options.headers) {
     std::string line = h.name + ": " + h.value;
     req_headers = curl_slist_append(req_headers, line.c_str());
   }
@@ -386,7 +386,7 @@ FetchResult Transfer::make_result(CURLcode code)
 {
   FetchResult r;
   r.url = options.url;
-  char *effective = nullptr;
+  char* effective = nullptr;
   if (easy.getinfo(CURLINFO_EFFECTIVE_URL, &effective) && effective) {
     r.url = effective;
   }

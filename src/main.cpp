@@ -1,15 +1,16 @@
 #include <curl/curl.h>
 #include <spdlog/spdlog.h>
 
+#include "curl_http.hpp"
 #include "fetch.hpp"
 #include "host.hpp"
 
-int main(int argc, char **argv)
+int main(int argc, char** argv)
 {
   spdlog::set_level(spdlog::level::debug);
   spdlog::set_pattern("[%H:%M:%S.%e] [%^%l%$] %v");
 
-  const char *script = "demo.js";
+  const char* script = "demo.js";
   if (argc >= 2) {
     script = argv[1];
   }

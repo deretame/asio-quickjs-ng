@@ -25,7 +25,7 @@ class NodeFixtureServer {
 public:
 ~NodeFixtureServer() { stop(); }
 
-bool start(const fs::path &script, const fs::path &working_dir = {})
+bool start(const fs::path& script, const fs::path& working_dir = {})
 {
   script_ = script;
   if (!fs::exists(script_)) {
@@ -113,7 +113,7 @@ bool start(const fs::path &script, const fs::path &working_dir = {})
     auto script = script_.string();
     auto dir = cwd.string();
     chdir(dir.c_str());
-    execlp("node", "node", script.c_str(), static_cast<char *>(nullptr));
+    execlp("node", "node", script.c_str(), static_cast<char*>(nullptr));
     _exit(127);
   }
   close(out_pipe[1]);
@@ -136,7 +136,7 @@ void stop()
 #ifdef _WIN32
   if (in_wr_) {
     DWORD w = 0;
-    const char *q = "quit\n";
+    const char* q = "quit\n";
     WriteFile(in_wr_, q, 5, &w, nullptr);
     CloseHandle(in_wr_);
     in_wr_ = nullptr;
@@ -154,7 +154,7 @@ void stop()
   }
 #else
   if (in_fd_ >= 0) {
-    const char *q = "quit\n";
+    const char* q = "quit\n";
     (void)write(in_fd_, q, 5);
     close(in_fd_);
     in_fd_ = -1;
@@ -228,8 +228,8 @@ bool read_ready_line()
     return false;
   }
   origin_ = line.substr(6);
-  while (!origin_.empty()
-    && (origin_.back() == ' ' || origin_.back() == '\r')) {
+  while (!origin_.empty() &&
+    (origin_.back() == ' ' || origin_.back() == '\r')) {
     origin_.pop_back();
   }
   return !origin_.empty();

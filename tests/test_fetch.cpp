@@ -15,12 +15,12 @@ namespace {
 
 namespace fs = std::filesystem;
 
-bool setup_host(Host &host)
+bool setup_host(Host& host)
 {
   return host && host.install_runtime() && fetch_api::install(host);
 }
 
-bool js_truthy(Host &host, qjs::Value v)
+bool js_truthy(Host& host, qjs::Value v)
 {
   return JS_ToBool(host.js_raw(), v.raw()) != 0;
 }
@@ -31,7 +31,7 @@ std::string js_str(qjs::Value v)
   return s.value_or("");
 }
 
-void run_js_async(Host &host, const std::string &body)
+void run_js_async(Host& host, const std::string& body)
 {
   std::string code =
     R"JS(
@@ -57,7 +57,7 @@ void run_js_async(Host &host, const std::string &body)
   EXPECT_EQ(js_str(host.global().get("__err")), "");
 }
 
-std::string quote_js(const std::string &s)
+std::string quote_js(const std::string& s)
 {
   std::string out = "\"";
   for (unsigned char c : s) {
@@ -78,8 +78,8 @@ class FetchLocal : public ::testing::Test {
 protected:
 void SetUp() override
 {
-  auto script =
-    fs::path(ASIO_QJS_SOURCE_DIR) / "tests" / "wpt" / "node_test_server.mjs";
+  auto script = fs::path(ASIO_QJS_SOURCE_DIR) / "tests" / "wpt" /
+    "node_test_server.mjs";
   server_.start(script);
   ASSERT_TRUE(setup_host(host_));
   origin_ = server_.origin();
@@ -194,7 +194,8 @@ TEST_F(FetchLocal, DataAndAboutSchemes) {
 TEST(FetchCpp, AsyncOptionsPost) {
   NodeFixtureServer server;
   server.start(
-    fs::path(ASIO_QJS_SOURCE_DIR) / "tests" / "wpt" / "node_test_server.mjs");
+    fs::path(ASIO_QJS_SOURCE_DIR) / "tests" / "wpt" /
+    "node_test_server.mjs");
   Host host;
   ASSERT_TRUE(setup_host(host));
   curl_http::FetchOptions opt;

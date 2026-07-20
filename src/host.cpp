@@ -48,7 +48,7 @@ void console_warn_fn(qjs::Args args) { log_args(spdlog::level::warn, args); }
 void console_error_fn(qjs::Args args) { log_args(spdlog::level::err, args); }
 
 async_simple::coro::Lazy<void> timeout_coro(
-  Host *host,
+  Host* host,
   qjs::Value callback,
   std::chrono::milliseconds delay
 )
@@ -66,7 +66,7 @@ async_simple::coro::Lazy<void> timeout_coro(
 }
 
 void set_timeout_fn(
-  Host *host,
+  Host* host,
   qjs::Value callback,
   std::optional<int32_t> delay_ms
 )
@@ -95,28 +95,28 @@ Host::Host(std::string id) : host_id(std::move(id)) {}
 
 Host::~Host() { shutdown(); }
 
-void Host::spdlog_lazy_error(const char *msg)
+void Host::spdlog_lazy_error(const char* msg)
 {
   spdlog::error("lazy exception: {}", msg);
 }
 
-void Host::register_function(const std::string &name, SyncFunction fn)
+void Host::register_function(const std::string& name, SyncFunction fn)
 {
   registry.register_function(name, std::move(fn));
 }
 
-void Host::register_async_function(const std::string &name, AsyncFunction fn)
+void Host::register_async_function(const std::string& name, AsyncFunction fn)
 {
   registry.register_async_function(name, std::move(fn));
 }
 
-void Host::register_global_function(const std::string &name, SyncFunction fn)
+void Host::register_global_function(const std::string& name, SyncFunction fn)
 {
   FunctionRegistry::register_global_function(name, std::move(fn));
 }
 
 void Host::register_global_async_function(
-  const std::string &name,
+  const std::string& name,
   AsyncFunction fn
 )
 {
@@ -125,13 +125,13 @@ void Host::register_global_async_function(
 
 void Host::shutdown() { stopping = true; }
 
-void Host::throw_type_error(const char *msg)
+void Host::throw_type_error(const char* msg)
 {
   JS_ThrowTypeError(ctx.get(), "%s", msg);
   throw std::runtime_error(msg);
 }
 
-void Host::throw_internal_error(const char *msg)
+void Host::throw_internal_error(const char* msg)
 {
   JS_ThrowInternalError(ctx.get(), "%s", msg);
   throw std::runtime_error(msg);
@@ -144,7 +144,7 @@ async_simple::coro::Lazy<void> Host::async_sleep(std::chrono::milliseconds ms)
   auto timer = std::make_shared<asio::steady_timer>(ioc);
   timer->expires_after(ms);
   timer->async_wait(
-    [p = std::move(p), timer](const asio::error_code &) mutable {
+    [p = std::move(p), timer](const asio::error_code&) mutable {
       p.setValue();
     });
   co_await std::move(fut);
@@ -159,7 +159,7 @@ bool Host::install_runtime()
   g.fn<&set_timeout_fn>("setTimeout");
   g.obj(
     "console",
-    [](qjs::Value &c) {
+    [](qjs::Value& c) {
       c.fn<&console_log_fn>("log");
       c.fn<&console_debug_fn>("debug");
       c.fn<&console_info_fn>("info");
@@ -177,7 +177,7 @@ bool Host::install_runtime()
 
 bool Host::eval_source(
   std::string_view code,
-  const char *filename,
+  const char* filename,
   bool drain
 )
 {
@@ -192,7 +192,7 @@ bool Host::eval_source(
   return true;
 }
 
-bool Host::eval_file(const char *path)
+bool Host::eval_file(const char* path)
 {
   std::ifstream in(path, std::ios::binary);
   if (!in) {

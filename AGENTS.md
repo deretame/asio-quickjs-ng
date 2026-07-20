@@ -304,7 +304,8 @@ The binary is intentionally kept out of Git. A Windows x64 build can be download
 
 ### Known limitations
 
-- Long function signatures are split so each parameter is indented one level from the declaration line, not aligned under the opening parenthesis. This matches the Rust style you want, but C++ return types live before the function name, so very long return types (like `async_simple::coro::Lazy<void>`) may end up on their own line.
+- Long function signatures are split so each parameter is indented one level from the declaration line, not aligned under the opening parenthesis. Multi-line definitions use **Allman braces** — the closing `)` is aligned with the declaration line and `{` is on the next line. This is the closest we can get to Rust style with uncrustify; uncrustify cannot place `) {` on the same line while keeping `)` aligned with the declaration line.
+- C++ return types live before the function name, so very long return types (like `async_simple::coro::Lazy<void>`) may end up on their own line.
 - Nested function calls can come out slightly off; if a call like `host->spawn_lazy(handle_async_call(...))` formats awkwardly, fix it by hand or split into a temporary variable.
 
 ## Where to start

@@ -3,27 +3,27 @@
 #include <spdlog/spdlog.h>
 
 #include <exception>
+#include <stdexcept>
 
 #include "host.hpp"
 
 namespace {
 
-qjs::Value make_error(JSContext *ctx, const char *msg)
+qjs::Value make_error(JSContext* ctx, const char* msg)
 {
   JSValue err = JS_NewError(ctx);
   JS_SetPropertyStr(ctx, err, "message", JS_NewString(ctx, msg));
   return qjs::Value::take(ctx, err);
 }
 
-async_simple::coro::Lazy<void>
-handle_async_call(
+async_simple::coro::Lazy<void> handle_async_call(
   qjs::Value resolve,
   qjs::Value reject,
   async_simple::coro::Lazy<qjs::Value> lazy
 )
 {
-  JSContext *ctx = resolve.ctx();
-  Host *host = static_cast<Host *>(JS_GetContextOpaque(ctx));
+  JSContext* ctx = resolve.ctx();
+  Host* host = static_cast<Host*>(JS_GetContextOpaque(ctx));
   try {
     qjs::Value result = co_await std::move(lazy);
     if (result.is_exception()) {
@@ -38,20 +38,14 @@ handle_async_call(
         host->ctx.dump_exception();
       }
     }
-  } catch (const qjs::detail::ConvertError &) {
+  } catch (const qjs::detail::ConvertError&) {
     qjs::Value exc = qjs::Ctx{ctx}.exception();
     qjs::Value ret = reject.call(exc);
     if (ret.is_exception()) {
       host->ctx.dump_exception();
     }
-  } catch (const std::exception &e) {
+  } catch (const std::exception& e) {
     qjs::Value err = make_error(ctx, e.what());
-    qjs::Value ret = reject.call(err);
-    if (ret.is_exception()) {
-      host->ctx.dump_exception();
-    }
-  } catch (...) {
-    qjs::Value err = make_error(ctx, "unknown native exception");
     qjs::Value ret = reject.call(err);
     if (ret.is_exception()) {
       host->ctx.dump_exception();
@@ -61,10 +55,10 @@ handle_async_call(
   co_return;
 }
 
-} // namespace
+}  // namespace
 
 void FunctionRegistry::register_function(
-  const std::string &name,
+  const std::string& name,
   SyncFunction fn
 )
 {
@@ -72,7 +66,7 @@ void FunctionRegistry::register_function(
 }
 
 void FunctionRegistry::register_async_function(
-  const std::string &name,
+  const std::string& name,
   AsyncFunction fn
 )
 {
@@ -80,7 +74,7 @@ void FunctionRegistry::register_async_function(
 }
 
 void FunctionRegistry::register_global_function(
-  const std::string &name,
+  const std::string& name,
   SyncFunction fn
 )
 {
@@ -89,7 +83,7 @@ void FunctionRegistry::register_global_function(
 }
 
 void FunctionRegistry::register_global_async_function(
-  const std::string &name,
+  const std::string& name,
   AsyncFunction fn
 )
 {
@@ -97,16 +91,17 @@ void FunctionRegistry::register_global_async_function(
   global_async_functions[name] = std::move(fn);
 }
 
-bool FunctionRegistry::has_function(const std::string &name) const
+bool FunctionRegistry::has_function(const std::string& name) const
 {
   std::shared_lock<std::shared_mutex> lock(global_mutex);
-  return sync_functions.contains(name) || async_functions.contains(name)
-         || global_sync_functions.contains(name)
-         || global_async_functions.contains(name);
+  return sync_functions.contains(name) || async_functions.contains(name) ||
+         global_sync_functions.contains(name) ||
+         global_async_functions.contains(name);
 }
 
-std::optional<SyncFunction>
-FunctionRegistry::find_sync_function(const std::string &name)
+std::optional<SyncFunction> FunctionRegistry::find_sync_function(
+  const std::string& name
+)
 {
   std::shared_lock<std::shared_mutex> lock(global_mutex);
   auto it = sync_functions.find(name);
@@ -120,8 +115,9 @@ FunctionRegistry::find_sync_function(const std::string &name)
   return std::nullopt;
 }
 
-std::optional<AsyncFunction>
-FunctionRegistry::find_async_function(const std::string &name)
+std::optional<AsyncFunction> FunctionRegistry::find_async_function(
+  const std::string& name
+)
 {
   std::shared_lock<std::shared_mutex> lock(global_mutex);
   auto it = async_functions.find(name);
@@ -136,24 +132,24 @@ FunctionRegistry::find_async_function(const std::string &name)
 }
 
 JSValue native_call(
-  JSContext *ctx,
+  JSContext* ctx,
   JSValueConst /*this_val*/,
   int argc,
-  JSValueConst *argv
+  JSValueConst* argv
 )
 {
   if (argc < 1) {
     return JS_ThrowTypeError(ctx, "call(name, ...args)");
   }
 
-  const char *name = JS_ToCString(ctx, argv[0]);
+  const char* name = JS_ToCString(ctx, argv[0]);
   if (!name) {
     return JS_EXCEPTION;
   }
   std::string name_str(name);
   JS_FreeCString(ctx, name);
 
-  Host *host = static_cast<Host *>(JS_GetContextOpaque(ctx));
+  Host* host = static_cast<Host*>(JS_GetContextOpaque(ctx));
   if (!host) {
     return JS_ThrowInternalError(ctx, "call: host is null");
   }
@@ -168,14 +164,10 @@ JSValue native_call(
     try {
       qjs::Value result = (*sync_fn)(qjs::Ctx{ctx}, host, owned_args);
       return result.release();
-    } catch (const qjs::detail::ConvertError &) {
+    } catch (const qjs::detail::ConvertError&) {
       return JS_EXCEPTION;
-    } catch (const std::exception &e) {
+    } catch (const std::exception& e) {
       return JS_Throw(ctx, make_error(ctx, e.what()).release());
-    } catch (...) {
-      return JS_Throw(
-        ctx,
-        make_error(ctx, "unknown native exception").release());
     }
   }
 

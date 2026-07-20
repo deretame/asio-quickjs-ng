@@ -9,7 +9,7 @@
 
 namespace {
 
-bool setup_host(Host &host)
+bool setup_host(Host& host)
 {
   if (!host) {
     return false;
@@ -48,7 +48,7 @@ TEST(HostId, DefaultIdIsUuidV4Shape) {
   Host host;
   ASSERT_TRUE(host);
 
-  const std::string &id = host.id();
+  const std::string& id = host.id();
   ASSERT_EQ(id.length(), 36u);
   EXPECT_EQ(id[8], '-');
   EXPECT_EQ(id[13], '-');
@@ -57,8 +57,8 @@ TEST(HostId, DefaultIdIsUuidV4Shape) {
   // Variant RFC 4122: byte 8's top two bits are 10 -> high nibble is 8/9/a/b.
   char variant_nibble = id[19];
   EXPECT_TRUE(
-    variant_nibble == '8' || variant_nibble == '9'
-    || variant_nibble == 'a' || variant_nibble == 'b')
+    variant_nibble == '8' || variant_nibble == '9' ||
+    variant_nibble == 'a' || variant_nibble == 'b')
     << "variant nibble was " << variant_nibble;
   EXPECT_EQ(id[23], '-');
 }

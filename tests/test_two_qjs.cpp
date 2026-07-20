@@ -18,14 +18,14 @@ using async_simple::coro::Lazy;
 using async_simple::coro::syncAwait;
 
 struct Vm {
-  const char *name = "?";
+  const char* name = "?";
   qjs::Runtime rt;
   qjs::Context ctx{rt};
   co::mpsc::Sender<std::string> tx;
   std::vector<std::string> log;
 };
 
-void print_fn(Vm *vm, qjs::Args args)
+void print_fn(Vm* vm, qjs::Args args)
 {
   for (int i = 0; i < args.size(); ++i) {
     auto s = args[i].to_std_string();
@@ -36,12 +36,12 @@ void print_fn(Vm *vm, qjs::Args args)
   }
 }
 
-void send_fn(Vm *vm, std::string msg)
+void send_fn(Vm* vm, std::string msg)
 {
   ASSERT_TRUE(vm->tx.send(std::move(msg)));
 }
 
-void install_vm(Vm &vm)
+void install_vm(Vm& vm)
 {
   vm.ctx.set_opaque(&vm);
   auto g = vm.ctx.global();
@@ -49,7 +49,7 @@ void install_vm(Vm &vm)
   g.fn<&send_fn>("send");
 }
 
-bool eval(Vm &vm, const char *code, const char *tag)
+bool eval(Vm& vm, const char* code, const char* tag)
 {
   qjs::Value ret = vm.ctx.eval(code, tag, JS_EVAL_TYPE_GLOBAL);
   if (ret.is_exception()) {
@@ -61,9 +61,9 @@ bool eval(Vm &vm, const char *code, const char *tag)
 }
 
 Lazy<void> recv_loop(
-  Vm *vm,
+  Vm* vm,
   co::mpsc::Receiver<std::string> rx,
-  std::vector<std::string> *inbox
+  std::vector<std::string>* inbox
 )
 {
   for (;;) {
@@ -112,11 +112,11 @@ TEST(TwoQjs, NonBlockingCrossTalk) {
 
   // Pumps run until first suspend on empty channel (non-blocking).
   recv_loop(&b, std::move(ab.rx), &b_inbox).start(
-    [&](auto &&) {
+    [&](auto&&) {
       b_done = true;
     });
   recv_loop(&a, std::move(ba.rx), &a_inbox).start(
-    [&](auto &&) {
+    [&](auto&&) {
       a_done = true;
     });
 

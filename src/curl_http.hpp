@@ -7,6 +7,7 @@
 #include <cstring>
 #include <functional>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace curl_http {
@@ -49,8 +50,8 @@ Global() { curl_global_init(CURL_GLOBAL_DEFAULT); }
 
 ~Global() { curl_global_cleanup(); }
 
-Global(const Global &) = delete;
-Global& operator=(const Global &) = delete;
+Global(const Global&) = delete;
+Global& operator=(const Global&) = delete;
 };
 
 class Easy {
@@ -59,12 +60,12 @@ Easy() : easy_(curl_easy_init()) {}
 
 ~Easy() { reset(); }
 
-Easy(const Easy &) = delete;
-Easy& operator=(const Easy &) = delete;
+Easy(const Easy&) = delete;
+Easy& operator=(const Easy&) = delete;
 
-Easy(Easy &&o) noexcept : easy_(o.easy_) { o.easy_ = nullptr; }
+Easy(Easy&& o) noexcept : easy_(o.easy_) { o.easy_ = nullptr; }
 
-Easy& operator=(Easy &&o) noexcept
+Easy& operator=(Easy&& o) noexcept
 {
   if (this != &o) {
     reset();
@@ -77,7 +78,7 @@ Easy& operator=(Easy &&o) noexcept
 explicit operator bool() const {
   return easy_ != nullptr;
 }
-CURL *get() const { return easy_; }
+CURL* get() const { return easy_; }
 
 void reset()
 {
@@ -94,13 +95,13 @@ void setopt(CURLoption opt, T value)
 }
 
 template <typename T>
-bool getinfo(CURLINFO info, T *out) const
+bool getinfo(CURLINFO info, T* out) const
 {
   return curl_easy_getinfo(easy_, info, out) == CURLE_OK;
 }
 
 private:
-CURL *easy_ = nullptr;
+CURL* easy_ = nullptr;
 };
 
 class Multi {
@@ -114,63 +115,63 @@ Multi() : multi_(curl_multi_init()) {}
   }
 }
 
-Multi(const Multi &) = delete;
-Multi& operator=(const Multi &) = delete;
+Multi(const Multi&) = delete;
+Multi& operator=(const Multi&) = delete;
 
 explicit operator bool() const {
   return multi_ != nullptr;
 }
-CURLM *get() const { return multi_; }
+CURLM* get() const { return multi_; }
 
-void set_socket_function(curl_socket_callback cb, void *data)
+void set_socket_function(curl_socket_callback cb, void* data)
 {
   curl_multi_setopt(multi_, CURLMOPT_SOCKETFUNCTION, cb);
   curl_multi_setopt(multi_, CURLMOPT_SOCKETDATA, data);
 }
 
-void set_timer_function(curl_multi_timer_callback cb, void *data)
+void set_timer_function(curl_multi_timer_callback cb, void* data)
 {
   curl_multi_setopt(multi_, CURLMOPT_TIMERFUNCTION, cb);
   curl_multi_setopt(multi_, CURLMOPT_TIMERDATA, data);
 }
 
-CURLMcode add(CURL *easy) { return curl_multi_add_handle(multi_, easy); }
+CURLMcode add(CURL* easy) { return curl_multi_add_handle(multi_, easy); }
 
-void remove(CURL *easy)
+void remove(CURL* easy)
 {
   if (multi_ && easy) {
     curl_multi_remove_handle(multi_, easy);
   }
 }
 
-void assign(curl_socket_t s, void *socketp)
+void assign(curl_socket_t s, void* socketp)
 {
   curl_multi_assign(multi_, s, socketp);
 }
 
-CURLMcode socket_action(curl_socket_t fd, int ev_bitmask, int *running)
+CURLMcode socket_action(curl_socket_t fd, int ev_bitmask, int* running)
 {
   return curl_multi_socket_action(multi_, fd, ev_bitmask, running);
 }
 
-CURLMsg *info_read(int *msgs_left)
+CURLMsg* info_read(int* msgs_left)
 {
   return curl_multi_info_read(multi_, msgs_left);
 }
 
 private:
-CURLM *multi_ = nullptr;
+CURLM* multi_ = nullptr;
 };
 
 struct Transfer {
-  Client *client = nullptr;
+  Client* client = nullptr;
   Easy easy;
   FetchOptions options;
   std::string body;
   std::vector<HeaderPair> response_headers;
   std::string status_text;
   char errbuf[CURL_ERROR_SIZE]{};
-  curl_slist *req_headers = nullptr;
+  curl_slist* req_headers = nullptr;
   std::function<void(FetchResult)> complete;
   uint64_t id = 0;
   bool finished = false;
@@ -183,8 +184,8 @@ struct Transfer {
     }
   }
 
-  static size_t write_cb(char *ptr, size_t size, size_t nmemb, void *userdata);
-  static size_t header_cb(char *ptr, size_t size, size_t nmemb, void *userdata);
+  static size_t write_cb(char* ptr, size_t size, size_t nmemb, void* userdata);
+  static size_t header_cb(char* ptr, size_t size, size_t nmemb, void* userdata);
 
   void finish(FetchResult result);
   void abort();
@@ -192,7 +193,7 @@ struct Transfer {
   FetchResult make_result(CURLcode code);
 };
 
-inline bool assign_socket(asio::ip::tcp::socket &sock, curl_socket_t s)
+inline bool assign_socket(asio::ip::tcp::socket& sock, curl_socket_t s)
 {
   asio::error_code ec;
   sock.assign(asio::ip::tcp::v4(), s, ec);

@@ -23,7 +23,7 @@ namespace fs = std::filesystem;
 
 namespace {
 
-std::string read_file(const fs::path &p)
+std::string read_file(const fs::path& p)
 {
   std::ifstream in(p, std::ios::binary);
   if (!in) {
@@ -34,7 +34,7 @@ std::string read_file(const fs::path &p)
   return ss.str();
 }
 
-std::string quote_js(const std::string &s)
+std::string quote_js(const std::string& s)
 {
   std::string out = "\"";
   for (unsigned char c : s) {
@@ -122,7 +122,7 @@ std::string strip_meta(std::string_view src)
 
 fs::path wpt_root()
 {
-  const char *env = std::getenv("WPT_ROOT");
+  const char* env = std::getenv("WPT_ROOT");
   if (env && *env) {
     return fs::path(env);
   }
@@ -132,7 +132,7 @@ fs::path wpt_root()
     fs::path("../../third_party/wpt"),
     fs::path(ASIO_QJS_SOURCE_DIR) / "third_party" / "wpt",
   };
-  for (const auto &c : candidates) {
+  for (const auto& c : candidates) {
     if (fs::exists(c / "resources" / "testharness.js")) {
       return fs::weakly_canonical(c);
     }
@@ -140,12 +140,12 @@ fs::path wpt_root()
   return {};
 }
 
-fs::path repo_root_from_wpt(const fs::path &wpt)
+fs::path repo_root_from_wpt(const fs::path& wpt)
 {
   return wpt.parent_path().parent_path();
 }
 
-bool eval_path(Host &host, const fs::path &p, bool drain = true)
+bool eval_path(Host& host, const fs::path& p, bool drain = true)
 {
   auto code = read_file(p);
   if (code.empty() && !fs::exists(p)) {
@@ -163,18 +163,18 @@ struct FileResult {
   std::string harness_error;
 };
 
-bool needs_fixture(const std::string &entry)
+bool needs_fixture(const std::string& entry)
 {
-  return entry.find("abort-network") != std::string::npos
-         || entry.find("network") != std::string::npos;
+  return entry.find("abort-network") != std::string::npos ||
+         entry.find("network") != std::string::npos;
 }
 
 FileResult run_wpt_file(
-  Host &host,
-  const fs::path &wpt,
-  const fs::path &repo,
-  const std::string &entry,
-  const std::string &fixture_origin
+  Host& host,
+  const fs::path& wpt,
+  const fs::path& repo,
+  const std::string& entry,
+  const std::string& fixture_origin
 )
 {
   FileResult fr;
@@ -196,10 +196,12 @@ FileResult run_wpt_file(
   auto meta = parse_meta(src);
   const fs::path dir = abs.parent_path();
 
-  if (
-    !eval_path(host, repo / "tests" / "wpt" / "shell_bootstrap.js", false)
-    || !eval_path(host, wpt / "resources" / "testharness.js", false)
-    || !eval_path(host, repo / "tests" / "wpt" / "testharnessreport.js", false)) {
+  if (!eval_path(host, repo / "tests" / "wpt" / "shell_bootstrap.js", false) ||
+    !eval_path(host, wpt / "resources" / "testharness.js", false) ||
+    !eval_path(
+    host,
+    repo / "tests" / "wpt" / "testharnessreport.js",
+    false)) {
     fr.harness_error = "failed loading testharness bootstrap";
     fr.failed = 1;
     return fr;
@@ -219,7 +221,7 @@ FileResult run_wpt_file(
       false);
   }
 
-  for (const auto &s : meta.scripts) {
+  for (const auto& s : meta.scripts) {
     fs::path sp = dir / s;
     if (!fs::exists(sp)) {
       sp = wpt / s;
@@ -317,7 +319,7 @@ FileResult run_wpt_file(
   return fr;
 }
 
-std::vector<std::string> load_manifest(const fs::path &repo)
+std::vector<std::string> load_manifest(const fs::path& repo)
 {
   auto text = read_file(repo / "tests" / "wpt" / "manifest.txt");
   std::vector<std::string> out;
@@ -352,7 +354,7 @@ void SetUp() override
 
 void TearDown() override { node_.stop(); }
 
-bool setup_host(Host &host)
+bool setup_host(Host& host)
 {
   return host && host.install_runtime() && fetch_api::install(host);
 }
@@ -369,13 +371,13 @@ TEST_F(WptFetch, OfficialManifest) {
   int total_pass = 0, total_fail = 0, total_skip = 0;
   std::ostringstream summary;
 
-  for (const auto &rel : files) {
+  for (const auto& rel : files) {
     Host host;
     ASSERT_TRUE(setup_host(host));
-    const std::string &origin =
-      needs_fixture(rel) || rel.find("external") != std::string::npos
-      ? node_.origin()
-      : node_.origin();    // always inject; harmless for offline suites
+    const std::string& origin =
+      needs_fixture(rel) || rel.find("external") != std::string::npos?
+      node_.origin():
+      node_.origin();          // always inject; harmless for offline suites
     auto fr = run_wpt_file(host, wpt_, repo_, rel, origin);
     host.shutdown();
 
@@ -388,7 +390,7 @@ TEST_F(WptFetch, OfficialManifest) {
     if (!fr.harness_error.empty()) {
       summary << "  HARNESS: " << fr.harness_error << "\n";
     }
-    for (const auto &f : fr.failures) {
+    for (const auto& f : fr.failures) {
       summary << f << "\n";
     }
 

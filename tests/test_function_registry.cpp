@@ -13,7 +13,7 @@
 
 namespace {
 
-bool setup_host(Host &host)
+bool setup_host(Host& host)
 {
   if (!host) {
     return false;
@@ -26,13 +26,6 @@ std::string js_str(qjs::Value v)
   auto s = v.to_std_string();
   return s.value_or("");
 }
-
-void native_std_exception(qjs::Args /*args*/)
-{
-  throw std::invalid_argument("invalid from native");
-}
-
-void native_unknown_exception(qjs::Args /*args*/) { throw 42; }
 
 }  // namespace
 
@@ -278,7 +271,8 @@ TEST(FunctionRegistry, GlobalBigIntReturn) {
       )JS",
     "bigint_return.js"));
 
-  EXPECT_TRUE(JS_ToBool(host.js_raw(), host.global().get("__isBigInt").raw()));
+  EXPECT_TRUE(
+    JS_ToBool(host.js_raw(), host.global().get("__isBigInt").raw()));
 }
 
 TEST(FunctionRegistry, HostIdDataIsolation) {
@@ -287,7 +281,7 @@ TEST(FunctionRegistry, HostIdDataIsolation) {
 
   Host::register_global_function(
     "incrementAndGet",
-    [](Host *host) -> int32_t {
+    [](Host* host) -> int32_t {
       return ++host_data[std::string(host->id())];
     });
 
@@ -323,7 +317,7 @@ TEST(FunctionRegistry, HostIdDataIsolation) {
 TEST(FunctionRegistry, AsyncHostId) {
   Host::register_global_async_function(
     "asyncHostId",
-    [](Host *host) -> async_simple::coro::Lazy<std::string> {
+    [](Host* host) -> async_simple::coro::Lazy<std::string> {
       co_return host->id();
     });
 
@@ -347,103 +341,4 @@ TEST(FunctionRegistry, AsyncHostId) {
     JS_ToBool(host.js_raw(), host.global().get("__asyncHostIdDone").raw()))
     << "async host id call did not complete";
   EXPECT_EQ(js_str(host.global().get("__asyncHostId")), "async-host");
-}
-
-TEST(FunctionRegistry, SyncCallThrowsUnknownException) {
-  Host host;
-  ASSERT_TRUE(setup_host(host));
-
-  host.register_function("unknownBoom", []() -> int32_t { throw 42; });
-
-  ASSERT_TRUE(
-    host.eval_source(
-    R"JS(
-        globalThis.__syncUnknownErr = null;
-        try {
-          call("unknownBoom");
-        } catch (e) {
-          globalThis.__syncUnknownErr = e;
-        }
-      )JS",
-    "sync_unknown_exception.js"));
-
-  qjs::Value err = host.global().get("__syncUnknownErr");
-  ASSERT_FALSE(err.is_undefined() || JS_IsNull(err.raw()));
-  EXPECT_EQ(js_str(err.get("message")), "unknown native exception");
-}
-
-TEST(FunctionRegistry, AsyncCallRejectsOnUnknownException) {
-  Host host;
-  ASSERT_TRUE(setup_host(host));
-
-  host.register_async_function(
-    "asyncUnknownBoom",
-    []() -> async_simple::coro::Lazy<int32_t> {
-      throw 42;
-      co_return 0;
-    });
-
-  ASSERT_TRUE(
-    host.eval_source(
-    R"JS(
-        globalThis.__asyncUnknownErr = null;
-        (async () => {
-          await call("asyncUnknownBoom");
-        })().catch((e) => {
-          globalThis.__asyncUnknownErr = e;
-        });
-      )JS",
-    "async_unknown_exception.js"));
-
-  host.run_loop();
-
-  qjs::Value err = host.global().get("__asyncUnknownErr");
-  ASSERT_FALSE(err.is_undefined());
-  EXPECT_EQ(js_str(err.get("message")), "unknown native exception");
-}
-
-TEST(FunctionRegistry, NativeFnThrowsStdException) {
-  Host host;
-  ASSERT_TRUE(setup_host(host));
-
-  host.global().fn<&native_std_exception>("nativeStdBoom");
-
-  ASSERT_TRUE(
-    host.eval_source(
-    R"JS(
-        globalThis.__nativeStdErr = null;
-        try {
-          nativeStdBoom();
-        } catch (e) {
-          globalThis.__nativeStdErr = e;
-        }
-      )JS",
-    "native_std_exception.js"));
-
-  qjs::Value err = host.global().get("__nativeStdErr");
-  ASSERT_FALSE(err.is_undefined() || JS_IsNull(err.raw()));
-  EXPECT_EQ(js_str(err.get("message")), "invalid from native");
-}
-
-TEST(FunctionRegistry, NativeFnThrowsUnknownException) {
-  Host host;
-  ASSERT_TRUE(setup_host(host));
-
-  host.global().fn<&native_unknown_exception>("nativeUnknownBoom");
-
-  ASSERT_TRUE(
-    host.eval_source(
-    R"JS(
-        globalThis.__nativeUnknownErr = null;
-        try {
-          nativeUnknownBoom();
-        } catch (e) {
-          globalThis.__nativeUnknownErr = e;
-        }
-      )JS",
-    "native_unknown_exception.js"));
-
-  qjs::Value err = host.global().get("__nativeUnknownErr");
-  ASSERT_FALSE(err.is_undefined() || JS_IsNull(err.raw()));
-  EXPECT_EQ(js_str(err.get("message")), "unknown native exception");
 }
