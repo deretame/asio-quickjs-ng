@@ -9,6 +9,7 @@
 #include <string_view>
 #include <tuple>
 #include <type_traits>
+#include <limits>
 #include <utility>
 
 extern "C" {
@@ -243,8 +244,31 @@ struct is_optional<std::optional<T>> : std::true_type {};
 // ---- concepts: 只允许我们实现了转换的类型 ----
 
 template <typename T>
-concept JsValueType = std::same_as<T, Value> || std::same_as<T, std::string> ||
-                      std::same_as<T, int32_t> || std::same_as<T, bool>;
+struct is_js_value_type : std::false_type {};
+
+template <>
+struct is_js_value_type<Value> : std::true_type {};
+template <>
+struct is_js_value_type<std::string> : std::true_type {};
+template <>
+struct is_js_value_type<bool> : std::true_type {};
+template <>
+struct is_js_value_type<int32_t> : std::true_type {};
+template <>
+struct is_js_value_type<int64_t> : std::true_type {};
+template <>
+struct is_js_value_type<uint32_t> : std::true_type {};
+template <>
+struct is_js_value_type<float> : std::true_type {};
+template <>
+struct is_js_value_type<double> : std::true_type {};
+
+template <typename T>
+inline constexpr bool is_js_value_type_v =
+    is_js_value_type<std::decay_t<T>>::value;
+
+template <typename T>
+concept JsValueType = is_js_value_type_v<T>;
 
 // 从 JS_GetContextOpaque 注入的应用对象指针，例如 Host*
 template <typename T>
@@ -263,10 +287,7 @@ concept JsArgType =
 
 template <typename T>
 concept JsReturnType =
-    std::is_void_v<T> || std::same_as<T, Value> || std::same_as<T, JSValue> ||
-    std::same_as<T, std::string> || std::same_as<T, std::string_view> ||
-    std::same_as<T, const char*> || std::same_as<T, int32_t> ||
-    std::same_as<T, bool>;
+    std::is_void_v<T> || std::same_as<T, JSValue> || is_js_value_type_v<T>;
 
 template <typename T>
 concept FreeFunctionPtr =
@@ -274,16 +295,15 @@ concept FreeFunctionPtr =
 
 // ---- from_js / to_js ----
 
-template <JsValueType T>
-T from_js(JSContext* ctx, JSValueConst v);
-
-template <>
-inline Value from_js<Value>(JSContext* ctx, JSValueConst v) {
+template <typename T>
+  requires std::same_as<T, Value>
+inline Value from_js(JSContext* ctx, JSValueConst v) {
   return Value::dup(ctx, v);
 }
 
-template <>
-inline std::string from_js<std::string>(JSContext* ctx, JSValueConst v) {
+template <typename T>
+  requires std::same_as<T, std::string>
+inline std::string from_js(JSContext* ctx, JSValueConst v) {
   const char* s = JS_ToCString(ctx, v);
   if (!s) {
     throw ConvertError{};
@@ -293,18 +313,39 @@ inline std::string from_js<std::string>(JSContext* ctx, JSValueConst v) {
   return out;
 }
 
-template <>
-inline int32_t from_js<int32_t>(JSContext* ctx, JSValueConst v) {
-  int32_t out = 0;
-  if (JS_ToInt32(ctx, &out, v)) {
-    throw ConvertError{};
+template <typename T>
+  requires(std::integral<T> || std::floating_point<T>)
+inline T from_js(JSContext* ctx, JSValueConst v) {
+  if constexpr (std::same_as<T, bool>) {
+    return JS_ToBool(ctx, v);
+  } else if constexpr (std::floating_point<T>) {
+    double out = 0;
+    if (JS_ToFloat64(ctx, &out, v)) {
+      throw ConvertError{};
+    }
+    return static_cast<T>(out);
+  } else if constexpr (std::same_as<T, int32_t>) {
+    int32_t out = 0;
+    if (JS_ToInt32(ctx, &out, v)) {
+      throw ConvertError{};
+    }
+    return out;
+  } else if constexpr (std::same_as<T, uint32_t>) {
+    int64_t out = 0;
+    if (JS_ToInt64(ctx, &out, v)) {
+      throw ConvertError{};
+    }
+    if (out < 0 || out > std::numeric_limits<uint32_t>::max()) {
+      throw ConvertError{};
+    }
+    return static_cast<uint32_t>(out);
+  } else if constexpr (std::same_as<T, int64_t>) {
+    int64_t out = 0;
+    if (JS_ToInt64(ctx, &out, v)) {
+      throw ConvertError{};
+    }
+    return out;
   }
-  return out;
-}
-
-template <>
-inline bool from_js<bool>(JSContext* ctx, JSValueConst v) {
-  return JS_ToBool(ctx, v);
 }
 
 template <JsValueType T>
@@ -363,10 +404,16 @@ JSValue to_js(JSContext* ctx, R&& r) {
                        std::same_as<T, const char*>) {
     std::string_view s = r;
     return JS_NewStringLen(ctx, s.data(), s.size());
-  } else if constexpr (std::same_as<T, int32_t>) {
-    return JS_NewInt32(ctx, r);
   } else if constexpr (std::same_as<T, bool>) {
     return JS_NewBool(ctx, r);
+  } else if constexpr (std::floating_point<T>) {
+    return JS_NewFloat64(ctx, static_cast<double>(r));
+  } else if constexpr (std::same_as<T, int32_t>) {
+    return JS_NewInt32(ctx, r);
+  } else if constexpr (std::same_as<T, uint32_t>) {
+    return JS_NewInt64(ctx, static_cast<int64_t>(r));
+  } else if constexpr (std::same_as<T, int64_t>) {
+    return JS_NewBigInt64(ctx, r);
   }
 }
 
