@@ -3,6 +3,8 @@
 #include <async_simple/coro/Lazy.h>
 
 #include <functional>
+#include <mutex>
+#include <optional>
 #include <string>
 #include <type_traits>
 #include <unordered_map>
@@ -186,10 +188,13 @@ struct FunctionRegistry {
 
   // Global functions shared by every Host.  Registered before or while Hosts
   // are running; looked up as a fallback when an instance has no matching name.
+  // Access is protected by global_mutex so multiple concurrent Host instances
+  // can safely register and call global functions.
   static inline std::unordered_map<std::string, SyncFunction>
       global_sync_functions;
   static inline std::unordered_map<std::string, AsyncFunction>
       global_async_functions;
+  static inline std::mutex global_mutex;
 
   // Low-level: store a hand-rolled adapter in this instance.
   void register_function(const std::string& name, SyncFunction fn);
@@ -221,6 +226,7 @@ struct FunctionRegistry {
   template <typename Fn>
     requires(!std::same_as<std::decay_t<Fn>, SyncFunction>)
   static void register_global_function(const std::string& name, Fn&& fn) {
+    std::lock_guard<std::mutex> lock(global_mutex);
     global_sync_functions[name] =
         function_registry_detail::make_sync_wrapper(std::forward<Fn>(fn));
   }
@@ -228,15 +234,17 @@ struct FunctionRegistry {
   template <typename Fn>
     requires(!std::same_as<std::decay_t<Fn>, AsyncFunction>)
   static void register_global_async_function(const std::string& name, Fn&& fn) {
+    std::lock_guard<std::mutex> lock(global_mutex);
     global_async_functions[name] =
         function_registry_detail::make_async_wrapper(std::forward<Fn>(fn));
   }
 
   bool has_function(const std::string& name) const;
 
-  // Lookup helpers: instance wins over global.
-  SyncFunction* find_sync_function(const std::string& name);
-  AsyncFunction* find_async_function(const std::string& name);
+  // Lookup helpers: instance wins over global.  Return by value so the mutex
+  // is released before the callback is invoked.
+  std::optional<SyncFunction> find_sync_function(const std::string& name);
+  std::optional<AsyncFunction> find_async_function(const std::string& name);
 };
 
 // JS native: call(name, ...args)

@@ -65,42 +65,49 @@ void FunctionRegistry::register_async_function(const std::string& name,
 
 void FunctionRegistry::register_global_function(const std::string& name,
                                                  SyncFunction fn) {
+  std::lock_guard<std::mutex> lock(global_mutex);
   global_sync_functions[name] = std::move(fn);
 }
 
 void FunctionRegistry::register_global_async_function(const std::string& name,
                                                        AsyncFunction fn) {
+  std::lock_guard<std::mutex> lock(global_mutex);
   global_async_functions[name] = std::move(fn);
 }
 
 bool FunctionRegistry::has_function(const std::string& name) const {
+  std::lock_guard<std::mutex> lock(global_mutex);
   return sync_functions.contains(name) || async_functions.contains(name) ||
          global_sync_functions.contains(name) ||
          global_async_functions.contains(name);
 }
 
-SyncFunction* FunctionRegistry::find_sync_function(const std::string& name) {
+std::optional<SyncFunction> FunctionRegistry::find_sync_function(
+    const std::string& name) {
+  std::lock_guard<std::mutex> lock(global_mutex);
   auto it = sync_functions.find(name);
   if (it != sync_functions.end()) {
-    return &it->second;
+    return it->second;
   }
   auto git = global_sync_functions.find(name);
   if (git != global_sync_functions.end()) {
-    return &git->second;
+    return git->second;
   }
-  return nullptr;
+  return std::nullopt;
 }
 
-AsyncFunction* FunctionRegistry::find_async_function(const std::string& name) {
+std::optional<AsyncFunction> FunctionRegistry::find_async_function(
+    const std::string& name) {
+  std::lock_guard<std::mutex> lock(global_mutex);
   auto it = async_functions.find(name);
   if (it != async_functions.end()) {
-    return &it->second;
+    return it->second;
   }
   auto git = global_async_functions.find(name);
   if (git != global_async_functions.end()) {
-    return &git->second;
+    return git->second;
   }
-  return nullptr;
+  return std::nullopt;
 }
 
 JSValue native_call(JSContext* ctx, JSValueConst /*this_val*/, int argc,
@@ -121,7 +128,7 @@ JSValue native_call(JSContext* ctx, JSValueConst /*this_val*/, int argc,
     return JS_ThrowInternalError(ctx, "call: host is null");
   }
 
-  SyncFunction* sync_fn = host->registry.find_sync_function(name_str);
+  auto sync_fn = host->registry.find_sync_function(name_str);
   if (sync_fn) {
     std::vector<qjs::Value> owned_args;
     owned_args.reserve(static_cast<size_t>(argc - 1));
@@ -138,7 +145,7 @@ JSValue native_call(JSContext* ctx, JSValueConst /*this_val*/, int argc,
     }
   }
 
-  AsyncFunction* async_fn = host->registry.find_async_function(name_str);
+  auto async_fn = host->registry.find_async_function(name_str);
   if (async_fn) {
     std::vector<qjs::Value> owned_args;
     owned_args.reserve(static_cast<size_t>(argc - 1));
