@@ -8,7 +8,12 @@
 #include <optional>
 #include <sstream>
 #include <stdexcept>
+#include <string>
+#include <string_view>
 #include <utility>
+#include <vector>
+
+#include <openssl/evp.h>
 
 #include "function_registry.hpp"
 #include "js_embedded.hpp"
@@ -173,8 +178,6 @@ void clear_timeout_fn(Host* host, int32_t id)
 {
   host->cancel_timer(id);
 }
-
-#include <openssl/evp.h>
 
 std::string base64_encode_bytes(const uint8_t* data, size_t len)
 {
