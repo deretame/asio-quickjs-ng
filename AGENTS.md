@@ -15,6 +15,7 @@ Current implemented features:
 - `setTimeout`, `clearTimeout`, `setInterval`, `clearInterval`, `print`, `console.*` (in `src/host.cpp`).
 - `fetch` / `Request` / `Response` / `Headers` / `AbortController` (polyfills in `src/js/*.js`; C++ transport in `src/fetch.cpp`, `src/curl_http.hpp`, and `src/curl_runtime.cpp`).
 - `base64` / `base64.encode` / `base64.decode` (in `src/host.cpp`).
+- `binaryStore.put` / `binaryStore.take`: global process-wide binary blob store (in `src/binary_store.*`). `put(bytes)` returns a UUID id; `take(id)` consumes and returns a `Uint8Array`, or `null` if missing. Entries unused for 15 minutes are dropped by lazy GC on put/take.
 - `Buffer` polyfill (in `src/js/buffer.js`, bundled and minified from the npm `buffer` package).
 - `crypto` module: hash/hmac (`md5`, `sha1`, `sha256`, `sha512`, `createHash`, `createHmac`), AES-ECB/CBC/GCM, `randomBytes`, `randomUUID`, `timingSafeEqual`, `pbkdf2`/`pbkdf2Sync` (C++ in `src/crypto.cpp`; JS wrapper in `src/js/crypto.js`).
 - Per-request `curl_http::Client` created inside `fetch_api::async_fetch` and discarded after the request completes.
@@ -66,6 +67,7 @@ asio-quickjs-ng/
 │   ├── curl_runtime.hpp/.cpp # libcurl multi-handle driver: socket/timer watches (per-request lifetime)
 │   ├── fetch.hpp/.cpp      # __nativeFetch, async_fetch, embedded JS bootstrap
 │   ├── crypto.hpp/.cpp     # OpenSSL-backed crypto primitives exposed to JS
+│   ├── binary_store.hpp/.cpp # Global binary blob store (put/take + TTL GC)
 │   ├── function_registry.hpp/.cpp # Dynamic call(name, ...args) registry
 │   ├── curl_http.hpp       # libcurl Global/Easy/Multi/Transfer wrappers
 │   ├── asio_executor.hpp   # async_simple Executor → asio
@@ -150,6 +152,7 @@ cmake --build build -j
 | `test_two_qjs` | `build/test_two_qjs.exe` | Two-VM interop test. |
 | `test_fetch` | `build/test_fetch.exe` | Local fetch smoke tests. |
 | `test_base64` | `build/test_base64.exe` | Base64 and zero-copy binding tests. |
+| `test_binary_store` | `build/test_binary_store.exe` | Global binaryStore put/take/GC tests. |
 | `test_crypto` | `build/test_crypto.exe` | Crypto module tests. |
 | `test_json` | `build/test_json.exe` | JSON library sanity tests. |
 | `test_host_id` | `build/test_host_id.exe` | Per-instance Host ID tests. |

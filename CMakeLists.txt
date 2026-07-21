@@ -50,6 +50,7 @@ find_package(Boost REQUIRED COMPONENTS uuid)
 
 # --- core library (host + fetch layers) ---
 add_library(asio_qjs_core
+  src/binary_store.cpp
   src/curl_runtime.cpp
   src/crypto.cpp
   src/host.cpp
@@ -135,6 +136,7 @@ if(ASIO_QJS_BUILD_TESTS)
   add_qjs_gtest(test_host_id tests/test_host_id.cpp)
   add_qjs_gtest(test_host_manager tests/test_host_manager.cpp)
   add_qjs_gtest(test_base64 tests/test_base64.cpp)
+  add_qjs_gtest(test_binary_store tests/test_binary_store.cpp)
   add_qjs_gtest(test_crypto tests/test_crypto.cpp)
 
   add_executable(test_wpt_fetch tests/test_wpt_fetch.cpp)

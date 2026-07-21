@@ -1,5 +1,7 @@
 #include "host.hpp"
 
+#include "binary_store.hpp"
+
 #include <spdlog/spdlog.h>
 
 #include <cerrno>
@@ -19,6 +21,18 @@
 #include "js_embedded.hpp"
 
 namespace {
+std::string safe_strerror(int errnum)
+{
+#ifdef _WIN32
+  char buffer[256];
+  strerror_s(buffer, sizeof(buffer), errnum);
+  return std::string(buffer);
+
+#else
+  return std::string(std::strerror(errnum));
+
+#endif
+}
 
 std::string join_args(qjs::Args args)
 {
@@ -397,6 +411,9 @@ bool Host::install_runtime()
     qjs::Value::take(
     ctx.get(),
     JS_NewCFunction(ctx.get(), &native_call, "call", 1)));
+  if (!binary_store::install(*this)) {
+    return false;
+  }
 
   constexpr EmbeddedJs k_core_bootstrap_js[] = {
     {"js/abort.js", kJsAbortBytes, sizeof(kJsAbortBytes)},
@@ -446,7 +463,7 @@ bool Host::eval_file(const char* path)
 {
   std::ifstream in(path, std::ios::binary);
   if (!in) {
-    spdlog::error("failed to open {}: {}", path, std::strerror(errno));
+    spdlog::error("failed to open {}: {}", path, safe_strerror(errno));
     return false;
   }
   std::ostringstream ss;
