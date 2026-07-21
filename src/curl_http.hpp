@@ -45,122 +45,122 @@ struct FetchResult {
 };
 
 class Global {
-public:
-Global() { curl_global_init(CURL_GLOBAL_DEFAULT); }
+ public:
+  Global() { curl_global_init(CURL_GLOBAL_DEFAULT); }
 
-~Global() { curl_global_cleanup(); }
+  ~Global() { curl_global_cleanup(); }
 
-Global(const Global&) = delete;
-Global& operator=(const Global&) = delete;
+  Global(const Global&) = delete;
+  Global& operator=(const Global&) = delete;
 };
 
 class Easy {
-public:
-Easy() : easy_(curl_easy_init()) {}
+ public:
+  Easy() : easy_(curl_easy_init()) {}
 
-~Easy() { reset(); }
+  ~Easy() { reset(); }
 
-Easy(const Easy&) = delete;
-Easy& operator=(const Easy&) = delete;
+  Easy(const Easy&) = delete;
+  Easy& operator=(const Easy&) = delete;
 
-Easy(Easy&& o) noexcept : easy_(o.easy_) { o.easy_ = nullptr; }
+  Easy(Easy&& o) noexcept : easy_(o.easy_) { o.easy_ = nullptr; }
 
-Easy& operator=(Easy&& o) noexcept
-{
-  if (this != &o) {
-    reset();
-    easy_ = o.easy_;
-    o.easy_ = nullptr;
+  Easy& operator=(Easy&& o) noexcept
+  {
+    if (this != &o) {
+      reset();
+      easy_ = o.easy_;
+      o.easy_ = nullptr;
+    }
+    return *this;
   }
-  return *this;
-}
 
-explicit operator bool() const {
-  return easy_ != nullptr;
-}
-CURL* get() const { return easy_; }
-
-void reset()
-{
-  if (easy_) {
-    curl_easy_cleanup(easy_);
-    easy_ = nullptr;
+  explicit operator bool() const {
+    return easy_ != nullptr;
   }
-}
+  CURL* get() const { return easy_; }
 
-template <typename T>
-void setopt(CURLoption opt, T value)
-{
-  curl_easy_setopt(easy_, opt, value);
-}
+  void reset()
+  {
+    if (easy_) {
+      curl_easy_cleanup(easy_);
+      easy_ = nullptr;
+    }
+  }
 
-template <typename T>
-bool getinfo(CURLINFO info, T* out) const
-{
-  return curl_easy_getinfo(easy_, info, out) == CURLE_OK;
-}
+  template <typename T>
+  void setopt(CURLoption opt, T value)
+  {
+    curl_easy_setopt(easy_, opt, value);
+  }
 
-private:
-CURL* easy_ = nullptr;
+  template <typename T>
+  bool getinfo(CURLINFO info, T* out) const
+  {
+    return curl_easy_getinfo(easy_, info, out) == CURLE_OK;
+  }
+
+ private:
+  CURL* easy_ = nullptr;
 };
 
 class Multi {
-public:
-Multi() : multi_(curl_multi_init()) {}
+ public:
+  Multi() : multi_(curl_multi_init()) {}
 
-~Multi()
-{
-  if (multi_) {
-    curl_multi_cleanup(multi_);
+  ~Multi()
+  {
+    if (multi_) {
+      curl_multi_cleanup(multi_);
+    }
   }
-}
 
-Multi(const Multi&) = delete;
-Multi& operator=(const Multi&) = delete;
+  Multi(const Multi&) = delete;
+  Multi& operator=(const Multi&) = delete;
 
-explicit operator bool() const {
-  return multi_ != nullptr;
-}
-CURLM* get() const { return multi_; }
-
-void set_socket_function(curl_socket_callback cb, void* data)
-{
-  curl_multi_setopt(multi_, CURLMOPT_SOCKETFUNCTION, cb);
-  curl_multi_setopt(multi_, CURLMOPT_SOCKETDATA, data);
-}
-
-void set_timer_function(curl_multi_timer_callback cb, void* data)
-{
-  curl_multi_setopt(multi_, CURLMOPT_TIMERFUNCTION, cb);
-  curl_multi_setopt(multi_, CURLMOPT_TIMERDATA, data);
-}
-
-CURLMcode add(CURL* easy) { return curl_multi_add_handle(multi_, easy); }
-
-void remove(CURL* easy)
-{
-  if (multi_ && easy) {
-    curl_multi_remove_handle(multi_, easy);
+  explicit operator bool() const {
+    return multi_ != nullptr;
   }
-}
+  CURLM* get() const { return multi_; }
 
-void assign(curl_socket_t s, void* socketp)
-{
-  curl_multi_assign(multi_, s, socketp);
-}
+  void set_socket_function(curl_socket_callback cb, void* data)
+  {
+    curl_multi_setopt(multi_, CURLMOPT_SOCKETFUNCTION, cb);
+    curl_multi_setopt(multi_, CURLMOPT_SOCKETDATA, data);
+  }
 
-CURLMcode socket_action(curl_socket_t fd, int ev_bitmask, int* running)
-{
-  return curl_multi_socket_action(multi_, fd, ev_bitmask, running);
-}
+  void set_timer_function(curl_multi_timer_callback cb, void* data)
+  {
+    curl_multi_setopt(multi_, CURLMOPT_TIMERFUNCTION, cb);
+    curl_multi_setopt(multi_, CURLMOPT_TIMERDATA, data);
+  }
 
-CURLMsg* info_read(int* msgs_left)
-{
-  return curl_multi_info_read(multi_, msgs_left);
-}
+  CURLMcode add(CURL* easy) { return curl_multi_add_handle(multi_, easy); }
 
-private:
-CURLM* multi_ = nullptr;
+  void remove(CURL* easy)
+  {
+    if (multi_ && easy) {
+      curl_multi_remove_handle(multi_, easy);
+    }
+  }
+
+  void assign(curl_socket_t s, void* socketp)
+  {
+    curl_multi_assign(multi_, s, socketp);
+  }
+
+  CURLMcode socket_action(curl_socket_t fd, int ev_bitmask, int* running)
+  {
+    return curl_multi_socket_action(multi_, fd, ev_bitmask, running);
+  }
+
+  CURLMsg* info_read(int* msgs_left)
+  {
+    return curl_multi_info_read(multi_, msgs_left);
+  }
+
+ private:
+  CURLM* multi_ = nullptr;
 };
 
 struct Transfer {

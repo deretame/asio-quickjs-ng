@@ -76,29 +76,29 @@ std::string quote_js(const std::string& s)
 }  // namespace
 
 class FetchLocal : public ::testing::Test {
-protected:
-void SetUp() override
-{
-  auto script = fs::path(ASIO_QJS_SOURCE_DIR) / "tests" / "wpt" /
-    "node_test_server.mjs";
-  server_.start(script);
-  ASSERT_TRUE(setup_host(host_));
-  origin_ = server_.origin();
-  ASSERT_TRUE(
-    host_.eval_source(
-    "globalThis.__ORIGIN = " + quote_js(origin_) + ";",
-    "origin.js"));
-}
+ protected:
+  void SetUp() override
+  {
+    auto script = fs::path(ASIO_QJS_SOURCE_DIR) / "tests" / "wpt" /
+      "node_test_server.mjs";
+    server_.start(script);
+    ASSERT_TRUE(setup_host(host_));
+    origin_ = server_.origin();
+    ASSERT_TRUE(
+      host_.eval_source(
+      "globalThis.__ORIGIN = " + quote_js(origin_) + ";",
+      "origin.js"));
+  }
 
-void TearDown() override
-{
-  host_.shutdown();
-  server_.stop();
-}
+  void TearDown() override
+  {
+    host_.shutdown();
+    server_.stop();
+  }
 
-NodeFixtureServer server_;
-Host host_;
-std::string origin_;
+  NodeFixtureServer server_;
+  Host host_;
+  std::string origin_;
 };
 
 TEST_F(FetchLocal, GetText) {

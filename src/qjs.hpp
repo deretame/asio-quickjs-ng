@@ -25,191 +25,191 @@ class Ctx;
 // Non-owning context view (for native callbacks)
 // ---------------------------------------------------------------------------
 class Ctx {
-public:
-explicit Ctx(JSContext* ctx) : ctx_(ctx) {}
+ public:
+  explicit Ctx(JSContext* ctx) : ctx_(ctx) {}
 
-JSContext* get() const { return ctx_; }
+  JSContext* get() const { return ctx_; }
 
-template <typename T>
-T* opaque() const
-{
-  return static_cast<T*>(JS_GetContextOpaque(ctx_));
-}
+  template <typename T>
+  T* opaque() const
+  {
+    return static_cast<T*>(JS_GetContextOpaque(ctx_));
+  }
 
-Value object() const;
-Value new_bool(bool v) const;
-Value new_int32(int32_t v) const;
-Value new_string(std::string_view s) const;
-Value undefined() const;
-Value exception() const;
+  Value object() const;
+  Value new_bool(bool v) const;
+  Value new_int32(int32_t v) const;
+  Value new_string(std::string_view s) const;
+  Value undefined() const;
+  Value exception() const;
 
-void dump_exception() const;
+  void dump_exception() const;
 
-[[noreturn]] void throw_type_error(const char* msg) const;
-[[noreturn]] void throw_internal_error(const char* msg) const;
+  [[noreturn]] void throw_type_error(const char* msg) const;
+  [[noreturn]] void throw_internal_error(const char* msg) const;
 
-template <auto Fn>
-Value func(const char* name) const;
+  template <auto Fn>
+  Value func(const char* name) const;
 
-private:
-JSContext* ctx_ = nullptr;
+ private:
+  JSContext* ctx_ = nullptr;
 };
 
 // ---------------------------------------------------------------------------
 // Value (RAII)
 // ---------------------------------------------------------------------------
 class Value {
-public:
-Value() = default;
-Value(JSContext* ctx, JSValue v) : ctx_(ctx), v_(v) {}
+ public:
+  Value() = default;
+  Value(JSContext* ctx, JSValue v) : ctx_(ctx), v_(v) {}
 
-~Value() { reset(); }
+  ~Value() { reset(); }
 
-Value(const Value& o)
-  : ctx_(o.ctx_), v_(o.ctx_ ? JS_DupValue(o.ctx_, o.v_) : o.v_) {}
+  Value(const Value& o)
+    : ctx_(o.ctx_), v_(o.ctx_ ? JS_DupValue(o.ctx_, o.v_) : o.v_) {}
 
-Value(Value&& o) noexcept : ctx_(o.ctx_), v_(o.v_)
-{
-  o.ctx_ = nullptr;
-  o.v_ = JS_UNDEFINED;
-}
-
-Value& operator=(Value o) noexcept
-{
-  swap(o);
-  return *this;
-}
-
-void swap(Value& o) noexcept
-{
-  std::swap(ctx_, o.ctx_);
-  std::swap(v_, o.v_);
-}
-
-explicit operator bool() const {
-  return ctx_ != nullptr;
-}
-
-JSContext* ctx() const { return ctx_; }
-
-JSValue raw() const { return v_; }
-
-JSValueConst cref() const { return v_; }
-
-JSValue release()
-{
-  JSValue out = v_;
-  ctx_ = nullptr;
-  v_ = JS_UNDEFINED;
-  return out;
-}
-
-void reset()
-{
-  if (ctx_) {
-    JS_FreeValue(ctx_, v_);
+  Value(Value&& o) noexcept : ctx_(o.ctx_), v_(o.v_)
+  {
+    o.ctx_ = nullptr;
+    o.v_ = JS_UNDEFINED;
   }
-  ctx_ = nullptr;
-  v_ = JS_UNDEFINED;
-}
 
-bool is_exception() const { return JS_IsException(v_); }
-
-bool is_function() const { return ctx_ && JS_IsFunction(ctx_, v_); }
-
-bool is_undefined() const { return JS_IsUndefined(v_); }
-
-static Value undefined() { return {}; }
-
-static Value dup(JSContext* ctx, JSValueConst v)
-{
-  return Value(ctx, JS_DupValue(ctx, v));
-}
-
-static Value take(JSContext* ctx, JSValue v) { return Value(ctx, v); }
-
-// Low-level.
-Value call_raw(JSValueConst this_val, int argc, JSValueConst* argv) const
-{
-  return take(ctx_, JS_Call(ctx_, v_, this_val, argc, argv));
-}
-
-// fn(), fn(a), fn(a, b, ...) — argc 由参数包推导；this = undefined
-template <typename... Args>
-Value call(const Args&... args) const
-{
-  return call_on_raw(JS_UNDEFINED, args...);
-}
-
-// method.call_on(obj, a, b)  — this = obj
-template <typename... Args>
-Value call_on(const Value& this_val, const Args&... args) const
-{
-  return call_on_raw(this_val.cref(), args...);
-}
-
-private:
-template <typename... Args>
-Value call_on_raw(JSValueConst this_val, const Args&... args) const
-{
-  static_assert(
-    (std::same_as<Args, Value> && ...),
-    "Value::call args must be qjs::Value");
-  constexpr int n = static_cast<int>(sizeof...(Args));
-  if constexpr (n == 0) {
-    return call_raw(this_val, 0, nullptr);
-  } else {
-    JSValueConst argv[n] = {args.cref()...};
-    return call_raw(this_val, n, argv);
+  Value& operator=(Value o) noexcept
+  {
+    swap(o);
+    return *this;
   }
-}
 
-public:
-std::optional<std::string> to_std_string() const
-{
-  if (!ctx_) {
-    return std::nullopt;
+  void swap(Value& o) noexcept
+  {
+    std::swap(ctx_, o.ctx_);
+    std::swap(v_, o.v_);
   }
-  const char* s = JS_ToCString(ctx_, v_);
-  if (!s) {
-    return std::nullopt;
+
+  explicit operator bool() const {
+    return ctx_ != nullptr;
   }
-  std::string out(s);
-  JS_FreeCString(ctx_, s);
-  return out;
-}
 
-bool to_int32(int32_t& out) const
-{
-  return ctx_ && JS_ToInt32(ctx_, &out, v_) == 0;
-}
+  JSContext* ctx() const { return ctx_; }
 
-void set(const char* name, Value value)
-{
-  JS_SetPropertyStr(ctx_, v_, name, value.release());
-}
+  JSValue raw() const { return v_; }
 
-// g.fn<&native_fn>("name") — name once (creates + sets C function).
-template <auto Fn>
-void fn(const char* name);
+  JSValueConst cref() const { return v_; }
 
-// g.obj("console", [](Value &o) { o.fn<&print_fn>("log"); });
-template <typename F>
-void obj(const char* name, F&& setup)
-{
-  Value child = take(ctx_, JS_NewObject(ctx_));
-  static_cast<F &&>(setup)(child);
-  set(name, std::move(child));
-}
+  JSValue release()
+  {
+    JSValue out = v_;
+    ctx_ = nullptr;
+    v_ = JS_UNDEFINED;
+    return out;
+  }
 
-Value get(const char* name) const
-{
-  return take(ctx_, JS_GetPropertyStr(ctx_, v_, name));
-}
+  void reset()
+  {
+    if (ctx_) {
+      JS_FreeValue(ctx_, v_);
+    }
+    ctx_ = nullptr;
+    v_ = JS_UNDEFINED;
+  }
 
-private:
-JSContext* ctx_ = nullptr;
-JSValue v_ = JS_UNDEFINED;
+  bool is_exception() const { return JS_IsException(v_); }
+
+  bool is_function() const { return ctx_ && JS_IsFunction(ctx_, v_); }
+
+  bool is_undefined() const { return JS_IsUndefined(v_); }
+
+  static Value undefined() { return {}; }
+
+  static Value dup(JSContext* ctx, JSValueConst v)
+  {
+    return Value(ctx, JS_DupValue(ctx, v));
+  }
+
+  static Value take(JSContext* ctx, JSValue v) { return Value(ctx, v); }
+
+  // Low-level.
+  Value call_raw(JSValueConst this_val, int argc, JSValueConst* argv) const
+  {
+    return take(ctx_, JS_Call(ctx_, v_, this_val, argc, argv));
+  }
+
+  // fn(), fn(a), fn(a, b, ...) — argc 由参数包推导；this = undefined
+  template <typename... Args>
+  Value call(const Args&... args) const
+  {
+    return call_on_raw(JS_UNDEFINED, args...);
+  }
+
+  // method.call_on(obj, a, b)  — this = obj
+  template <typename... Args>
+  Value call_on(const Value& this_val, const Args&... args) const
+  {
+    return call_on_raw(this_val.cref(), args...);
+  }
+
+ private:
+  template <typename... Args>
+  Value call_on_raw(JSValueConst this_val, const Args&... args) const
+  {
+    static_assert(
+      (std::same_as<Args, Value> && ...),
+      "Value::call args must be qjs::Value");
+    constexpr int n = static_cast<int>(sizeof...(Args));
+    if constexpr (n == 0) {
+      return call_raw(this_val, 0, nullptr);
+    } else {
+      JSValueConst argv[n] = {args.cref()...};
+      return call_raw(this_val, n, argv);
+    }
+  }
+
+ public:
+  std::optional<std::string> to_std_string() const
+  {
+    if (!ctx_) {
+      return std::nullopt;
+    }
+    const char* s = JS_ToCString(ctx_, v_);
+    if (!s) {
+      return std::nullopt;
+    }
+    std::string out(s);
+    JS_FreeCString(ctx_, s);
+    return out;
+  }
+
+  bool to_int32(int32_t& out) const
+  {
+    return ctx_ && JS_ToInt32(ctx_, &out, v_) == 0;
+  }
+
+  void set(const char* name, Value value)
+  {
+    JS_SetPropertyStr(ctx_, v_, name, value.release());
+  }
+
+  // g.fn<&native_fn>("name") — name once (creates + sets C function).
+  template <auto Fn>
+  void fn(const char* name);
+
+  // g.obj("console", [](Value &o) { o.fn<&print_fn>("log"); });
+  template <typename F>
+  void obj(const char* name, F&& setup)
+  {
+    Value child = take(ctx_, JS_NewObject(ctx_));
+    static_cast<F &&>(setup)(child);
+    set(name, std::move(child));
+  }
+
+  Value get(const char* name) const
+  {
+    return take(ctx_, JS_GetPropertyStr(ctx_, v_, name));
+  }
+
+ private:
+  JSContext* ctx_ = nullptr;
+  JSValue v_ = JS_UNDEFINED;
 };
 
 inline Value Ctx::object() const
@@ -627,115 +627,115 @@ void Value::fn(const char* name)
 // Owning Runtime / Context
 // ---------------------------------------------------------------------------
 class Runtime {
-public:
-Runtime() : rt_(JS_NewRuntime()) {}
+ public:
+  Runtime() : rt_(JS_NewRuntime()) {}
 
-~Runtime()
-{
-  if (rt_) {
-    JS_FreeRuntime(rt_);
-  }
-}
-
-Runtime(const Runtime&) = delete;
-Runtime& operator=(const Runtime&) = delete;
-
-Runtime(Runtime&& o) noexcept : rt_(o.rt_) { o.rt_ = nullptr; }
-
-Runtime& operator=(Runtime&& o) noexcept
-{
-  if (this != &o) {
+  ~Runtime()
+  {
     if (rt_) {
       JS_FreeRuntime(rt_);
     }
-    rt_ = o.rt_;
-    o.rt_ = nullptr;
   }
-  return *this;
-}
 
-explicit operator bool() const {
-  return rt_ != nullptr;
-}
-JSRuntime* get() const { return rt_; }
+  Runtime(const Runtime&) = delete;
+  Runtime& operator=(const Runtime&) = delete;
 
-bool job_pending() const { return JS_IsJobPending(rt_); }
+  Runtime(Runtime&& o) noexcept : rt_(o.rt_) { o.rt_ = nullptr; }
 
-bool drain_jobs()
-{
-  bool ok = true;
-  JSContext* job_ctx = nullptr;
-  while (JS_IsJobPending(rt_)) {
-    if (JS_ExecutePendingJob(rt_, &job_ctx) < 0) {
-      ok = false;
-      if (job_ctx) {
-        Ctx{job_ctx}.dump_exception();
+  Runtime& operator=(Runtime&& o) noexcept
+  {
+    if (this != &o) {
+      if (rt_) {
+        JS_FreeRuntime(rt_);
+      }
+      rt_ = o.rt_;
+      o.rt_ = nullptr;
+    }
+    return *this;
+  }
+
+  explicit operator bool() const {
+    return rt_ != nullptr;
+  }
+  JSRuntime* get() const { return rt_; }
+
+  bool job_pending() const { return JS_IsJobPending(rt_); }
+
+  bool drain_jobs()
+  {
+    bool ok = true;
+    JSContext* job_ctx = nullptr;
+    while (JS_IsJobPending(rt_)) {
+      if (JS_ExecutePendingJob(rt_, &job_ctx) < 0) {
+        ok = false;
+        if (job_ctx) {
+          Ctx{job_ctx}.dump_exception();
+        }
       }
     }
+    return ok;
   }
-  return ok;
-}
 
-private:
-JSRuntime* rt_ = nullptr;
+ private:
+  JSRuntime* rt_ = nullptr;
 };
 
 class Context {
-public:
-explicit Context(Runtime& rt) : ctx_(JS_NewContext(rt.get())) {}
+ public:
+  explicit Context(Runtime& rt) : ctx_(JS_NewContext(rt.get())) {}
 
-~Context()
-{
-  if (ctx_) {
-    JS_FreeContext(ctx_);
+  ~Context()
+  {
+    if (ctx_) {
+      JS_FreeContext(ctx_);
+    }
   }
-}
 
-Context(const Context&) = delete;
-Context& operator=(const Context&) = delete;
+  Context(const Context&) = delete;
+  Context& operator=(const Context&) = delete;
 
-explicit operator bool() const {
-  return ctx_ != nullptr;
-}
-JSContext* get() const { return ctx_; }
+  explicit operator bool() const {
+    return ctx_ != nullptr;
+  }
+  JSContext* get() const { return ctx_; }
 
-Ctx ref() const { return Ctx{ctx_}; }
+  Ctx ref() const { return Ctx{ctx_}; }
 
-void set_opaque(void* p) { JS_SetContextOpaque(ctx_, p); }
+  void set_opaque(void* p) { JS_SetContextOpaque(ctx_, p); }
 
-template <typename T>
-T* opaque() const
-{
-  return static_cast<T*>(JS_GetContextOpaque(ctx_));
-}
+  template <typename T>
+  T* opaque() const
+  {
+    return static_cast<T*>(JS_GetContextOpaque(ctx_));
+  }
 
-Value global() { return Value::take(ctx_, JS_GetGlobalObject(ctx_)); }
+  Value global() { return Value::take(ctx_, JS_GetGlobalObject(ctx_)); }
 
-Value object() { return ref().object(); }
+  Value object() { return ref().object(); }
 
-Value new_bool(bool v) { return ref().new_bool(v); }
+  Value new_bool(bool v) { return ref().new_bool(v); }
 
-Value new_int32(int32_t v) { return ref().new_int32(v); }
+  Value new_int32(int32_t v) { return ref().new_int32(v); }
 
-Value new_string(std::string_view s) { return ref().new_string(s); }
+  Value new_string(std::string_view s) { return ref().new_string(s); }
 
-Value eval(std::string_view code, const char* filename, int flags)
-{
-  return Value::take(
-    ctx_,
-    JS_Eval(ctx_, code.data(), code.size(), filename, flags));
-}
+  Value eval(std::string_view code, const char* filename, int flags)
+  {
+    return Value::take(
+      ctx_,
+      JS_Eval(ctx_, code.data(), code.size(), filename, flags));
+  }
 
-void dump_exception() { ref().dump_exception(); }
+  void dump_exception() { ref().dump_exception(); }
 
-template <auto Fn>
-Value func(const char* name)
-{
-  return Func<Fn>::create(ctx_, name);
-}
+  template <auto Fn>
+  Value func(const char* name)
+  {
+    return Func<Fn>::create(ctx_, name);
+  }
 
-private:
-JSContext* ctx_ = nullptr;
+ private:
+  JSContext* ctx_ = nullptr;
 };
 
 struct PromiseCapability {

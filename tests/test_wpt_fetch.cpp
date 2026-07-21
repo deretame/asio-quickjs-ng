@@ -340,28 +340,28 @@ std::vector<std::string> load_manifest(const fs::path& repo)
 }  // namespace
 
 class WptFetch : public ::testing::Test {
-protected:
-void SetUp() override
-{
-  wpt_ = wpt_root();
-  ASSERT_FALSE(wpt_.empty())
-    << "third_party/wpt not found; clone WPT sparse checkout";
-  repo_ = repo_root_from_wpt(wpt_);
-  auto script = repo_ / "tests" / "wpt" / "node_test_server.mjs";
-  ASSERT_TRUE(node_.start(script, repo_))
-    << "failed to start node test server (is node on PATH?)";
-}
+ protected:
+  void SetUp() override
+  {
+    wpt_ = wpt_root();
+    ASSERT_FALSE(wpt_.empty())
+      << "third_party/wpt not found; clone WPT sparse checkout";
+    repo_ = repo_root_from_wpt(wpt_);
+    auto script = repo_ / "tests" / "wpt" / "node_test_server.mjs";
+    ASSERT_TRUE(node_.start(script, repo_))
+      << "failed to start node test server (is node on PATH?)";
+  }
 
-void TearDown() override { node_.stop(); }
+  void TearDown() override { node_.stop(); }
 
-bool setup_host(Host& host)
-{
-  return host && host.install_runtime() && fetch_api::install(host);
-}
+  bool setup_host(Host& host)
+  {
+    return host && host.install_runtime() && fetch_api::install(host);
+  }
 
-fs::path wpt_;
-fs::path repo_;
-NodeFixtureServer node_;
+  fs::path wpt_;
+  fs::path repo_;
+  NodeFixtureServer node_;
 };
 
 TEST_F(WptFetch, OfficialManifest) {

@@ -60,7 +60,7 @@ struct CurlWatch : std::enable_shared_from_this<CurlWatch> {
       asio::ip::tcp::socket::wait_write);
   }
 
-private:
+ private:
   void arm_dir(
     int poll_bit,
     int ev_bit,

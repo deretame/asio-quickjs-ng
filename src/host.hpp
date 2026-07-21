@@ -198,7 +198,7 @@ struct Host {
     );
   bool eval_file(const char* path);
 
-private:
+ private:
   static void spdlog_lazy_error(const char* msg);
 
   int32_t next_timer_id_ = 1;
