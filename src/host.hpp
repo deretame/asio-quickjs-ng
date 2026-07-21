@@ -121,10 +121,11 @@ struct Host {
       std::forward<Fn>(fn));
   }
 
-  // Timer registry for setTimeout / clearTimeout.
+  // Timer registry for setTimeout / setInterval / clearTimeout / clearInterval.
   int32_t register_timer(std::shared_ptr<asio::steady_timer> timer);
   void cancel_timer(int32_t id);
   bool erase_timer_if_active(int32_t id);
+  bool timer_is_active(int32_t id) const;
 
   [[noreturn]] void throw_type_error(const char* msg);
   [[noreturn]] void throw_internal_error(const char* msg);

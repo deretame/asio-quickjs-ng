@@ -75,6 +75,73 @@ async_simple::coro::Lazy<void> timeout_coro(
   co_return;
 }
 
+async_simple::coro::Lazy<void> interval_coro(
+  Host* host,
+  qjs::Value callback,
+  int32_t id,
+  std::shared_ptr<asio::steady_timer> timer,
+  std::chrono::milliseconds delay
+)
+{
+  while (true) {
+    async_simple::Promise<void> p;
+    auto fut = p.getFuture();
+    timer->expires_after(delay);
+    timer->async_wait(
+      [p = std::move(p), timer](const asio::error_code&) mutable {
+        p.setValue();
+      });
+    co_await std::move(fut);
+
+    if (host->stopping || !host->timer_is_active(id)) {
+      break;
+    }
+
+    qjs::Value ret = callback.call();
+    if (ret.is_exception()) {
+      host->ctx.dump_exception();
+    }
+    host->drain_jobs();
+
+    if (!host->timer_is_active(id)) {
+      break;
+    }
+  }
+  --host->pending_ops;
+  co_return;
+}
+
+int32_t set_interval_fn(
+  Host* host,
+  qjs::Value callback,
+  std::optional<int32_t> delay_ms
+)
+{
+  if (!callback.is_function()) {
+    host->throw_type_error("setInterval(fn, ms)");
+  }
+  int32_t ms = delay_ms.value_or(0);
+  if (ms < 0) {
+    ms = 0;
+  }
+  auto timer = std::make_shared<asio::steady_timer>(host->ioc);
+  int32_t id = host->register_timer(timer);
+  ++host->pending_ops;
+  host->spawn_lazy(
+    interval_coro(
+    host,
+    std::move(callback),
+    id,
+    std::move(timer),
+    std::chrono::milliseconds(ms)));
+  return id;
+}
+
+void clear_interval_fn(Host* host, int32_t id)
+{
+  host->cancel_timer(id);
+}
+
 int32_t set_timeout_fn(
   Host* host,
   qjs::Value callback,
@@ -148,6 +215,11 @@ bool Host::erase_timer_if_active(int32_t id)
   return true;
 }
 
+bool Host::timer_is_active(int32_t id) const
+{
+  return active_timers_.find(id) != active_timers_.end();
+}
+
 void Host::spdlog_lazy_error(const char* msg)
 {
   spdlog::error("lazy exception: {}", msg);
@@ -211,6 +283,8 @@ bool Host::install_runtime()
   g.fn<&print_fn>("print");
   g.fn<&set_timeout_fn>("setTimeout");
   g.fn<&clear_timeout_fn>("clearTimeout");
+  g.fn<&set_interval_fn>("setInterval");
+  g.fn<&clear_interval_fn>("clearInterval");
   g.obj(
     "console",
     [](qjs::Value& c) {
