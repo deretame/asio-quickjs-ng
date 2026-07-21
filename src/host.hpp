@@ -9,10 +9,12 @@
 #include <boost/uuid/uuid_io.hpp>
 
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <exception>
 #include <memory>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -190,6 +192,17 @@ struct Host {
   }
 
   bool install_runtime();
+
+  // Load a list of embedded JS polyfills. Used by Host::install_runtime and
+  // by feature modules (crypto, fetch) that need to expose native functions
+  // before their JS wrappers are evaluated.
+  struct EmbeddedJs {
+    const char* name;
+    const unsigned char* bytes;
+    std::size_t size;
+  };
+  bool install_bootstrap_js(std::span<const EmbeddedJs> scripts);
+
   // drain_jobs=false keeps Promise microtasks pending (needed for WPT batch
   // load).
   bool eval_source(

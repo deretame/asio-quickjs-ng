@@ -23,27 +23,6 @@ using curl_http::HeaderPair;
 using curl_http::Transfer;
 using namespace js_embedded;
 
-struct EmbeddedJs {
-  const char* name;
-  const unsigned char* bytes;
-  std::size_t size;
-};
-
-constexpr EmbeddedJs kBootstrapJs[] = {
-  {"js/abort.js", kJsAbortBytes, sizeof(kJsAbortBytes)},
-  {"js/text-encoding-polyfill.js", kJsTextEncodingPolyfillBytes,
-   sizeof(kJsTextEncodingPolyfillBytes)},
-  {"js/whatwg-url-polyfill.js", kJsWhatwgUrlPolyfillBytes,
-   sizeof(kJsWhatwgUrlPolyfillBytes)},
-  {"js/body_polyfill.js", kJsBodyPolyfillBytes, sizeof(kJsBodyPolyfillBytes)},
-  {"js/buffer.js", kJsBufferBytes, sizeof(kJsBufferBytes)},
-  {"js/headers.js", kJsHeadersBytes, sizeof(kJsHeadersBytes)},
-  {"js/request.js", kJsRequestBytes, sizeof(kJsRequestBytes)},
-  {"js/response.js", kJsResponseBytes, sizeof(kJsResponseBytes)},
-  {"js/fetch.js", kJsFetchBytes, sizeof(kJsFetchBytes)},
-  {"js/crypto.js", kJsCryptoBytes, sizeof(kJsCryptoBytes)},
-};
-
 std::vector<uint8_t> js_prop_bytes(JSContext* ctx, JSValueConst obj, const char* name)
 {
   JSValue v = JS_GetPropertyStr(ctx, obj, name);
@@ -207,23 +186,6 @@ Lazy<void> native_fetch_coro(
   co_return;
 }
 
-bool install_bootstrap_js(Host& host)
-{
-  for (const EmbeddedJs& script : kBootstrapJs) {
-    // Copy to std::string so the source is null-terminated; QuickJS may rely
-    // on it even though JS_Eval takes an explicit length.
-    std::string src{reinterpret_cast<const char*>(script.bytes), script.size};
-    qjs::Value ret = host.ctx.eval(src, script.name, JS_EVAL_TYPE_GLOBAL);
-    if (ret.is_exception()) {
-      spdlog::error("bootstrap failed: {}", script.name);
-      host.ctx.dump_exception();
-      return false;
-    }
-  }
-  host.drain_jobs();
-  return true;
-}
-
 }  // namespace
 
 namespace fetch_api {
@@ -316,7 +278,14 @@ bool install(Host& host)
 {
   host.global().fn<&native_fetch_fn>("__nativeFetch");
   host.global().fn<&native_fetch_abort_fn>("__nativeFetchAbort");
-  return install_bootstrap_js(host);
+
+  constexpr Host::EmbeddedJs k_fetch_bootstrap_js[] = {
+    {"js/headers.js", kJsHeadersBytes, sizeof(kJsHeadersBytes)},
+    {"js/request.js", kJsRequestBytes, sizeof(kJsRequestBytes)},
+    {"js/response.js", kJsResponseBytes, sizeof(kJsResponseBytes)},
+    {"js/fetch.js", kJsFetchBytes, sizeof(kJsFetchBytes)},
+  };
+  return host.install_bootstrap_js(k_fetch_bootstrap_js);
 }
 
 }  // namespace fetch_api

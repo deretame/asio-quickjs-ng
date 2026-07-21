@@ -1,6 +1,7 @@
 #include "crypto.hpp"
 
 #include "host.hpp"
+#include "js_embedded.hpp"
 
 #include <openssl/hmac.h>
 #include <openssl/rand.h>
@@ -509,7 +510,11 @@ bool install(Host& host)
   crypto.fn<&timing_safe_equal>("timingSafeEqual");
   crypto.fn<&pbkdf2_sync>("pbkdf2Sync");
   host.global().set("__nativeCrypto", std::move(crypto));
-  return true;
+
+  constexpr Host::EmbeddedJs k_crypto_js[] = {
+    {"js/crypto.js", js_embedded::kJsCryptoBytes, sizeof(js_embedded::kJsCryptoBytes)},
+  };
+  return host.install_bootstrap_js(k_crypto_js);
 }
 
 }  // namespace crypto_api

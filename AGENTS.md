@@ -234,20 +234,20 @@ The runner starts `tests/wpt/node_test_server.mjs` as a network fixture, reads `
 
 ### JS bootstrap order
 
-At runtime, `fetch_api::install` loads these JS polyfills from the generated `build/generated/js_embedded.hpp` in order:
+`Host::install_runtime` loads the core embedded JS polyfills from `build/generated/js_embedded.hpp`:
 
 1. `js/abort.js` — `AbortController`, `AbortSignal`, `DOMException`.
-2. `js/text-encoding-polyfill.js` — `TextEncoder` and `TextDecoder` globals from `fast-text-encoding` for polyfills that need them.
+2. `js/text-encoding-polyfill.js` — `TextEncoder` and `TextDecoder` globals.
 3. `js/whatwg-url-polyfill.js` — full WHATWG `URL` and `URLSearchParams`.
 4. `js/body_polyfill.js` — minimal `Blob`, `URLSearchParams`, `FormData`, `URL`, `ReadableStream`.
-5. `js/buffer.js` — minimal `Buffer` global.
-6. `js/headers.js` — `Headers` class.
-7. `js/request.js` — `Request` class.
-8. `js/response.js` — `Response` class.
-9. `js/fetch.js` — `fetch` global, uses `__nativeFetch` / `__nativeFetchAbort`.
-10. `js/crypto.js` — `crypto` global, uses `__nativeCrypto`.
+5. `js/buffer.js` — `Buffer` global.
 
-`crypto_api::install` must be called before `fetch_api::install` so that `__nativeCrypto` is available when `js/crypto.js` is loaded.
+Feature modules then load their own JS wrappers via `Host::install_bootstrap_js` after registering their native functions:
+
+- `crypto_api::install` registers `__nativeCrypto` and loads `js/crypto.js`.
+- `fetch_api::install` registers `__nativeFetch` / `__nativeFetchAbort` and loads `js/headers.js`, `js/request.js`, `js/response.js`, `js/fetch.js`.
+
+Typical initialization order is `install_runtime()` → `crypto_api::install()` → `fetch_api::install()`.
 
 If you edit a `.js` file, you must rebuild for `cmake/embed_js.cmake` to regenerate `build/generated/js_embedded.hpp`.
 

@@ -11,6 +11,7 @@
 #include <utility>
 
 #include "function_registry.hpp"
+#include "js_embedded.hpp"
 
 namespace {
 
@@ -182,9 +183,9 @@ std::string base64_encode_bytes(const uint8_t* data, size_t len)
   out.reserve(((len + 2) / 3) * 4);
   size_t i = 0;
   while (i + 3 <= len) {
-    uint32_t b = (static_cast<uint32_t>(data[i]) << 16)
-                 | (static_cast<uint32_t>(data[i + 1]) << 8)
-                 | static_cast<uint32_t>(data[i + 2]);
+    uint32_t b = (static_cast<uint32_t>(data[i]) << 16) |
+      (static_cast<uint32_t>(data[i + 1]) << 8) |
+      static_cast<uint32_t>(data[i + 2]);
     out.push_back(table[(b >> 18) & 0x3F]);
     out.push_back(table[(b >> 12) & 0x3F]);
     out.push_back(table[(b >> 6) & 0x3F]);
@@ -384,6 +385,8 @@ async_simple::coro::Lazy<void> Host::async_sleep(std::chrono::milliseconds ms)
 
 bool Host::install_runtime()
 {
+  using namespace js_embedded;
+
   ctx.set_opaque(this);
   auto g = global();
   g.fn<&print_fn>("print");
@@ -412,6 +415,31 @@ bool Host::install_runtime()
     qjs::Value::take(
     ctx.get(),
     JS_NewCFunction(ctx.get(), &native_call, "call", 1)));
+
+  constexpr EmbeddedJs k_core_bootstrap_js[] = {
+    {"js/abort.js", kJsAbortBytes, sizeof(kJsAbortBytes)},
+    {"js/text-encoding-polyfill.js", kJsTextEncodingPolyfillBytes,
+     sizeof(kJsTextEncodingPolyfillBytes)},
+    {"js/whatwg-url-polyfill.js", kJsWhatwgUrlPolyfillBytes,
+     sizeof(kJsWhatwgUrlPolyfillBytes)},
+    {"js/body_polyfill.js", kJsBodyPolyfillBytes, sizeof(kJsBodyPolyfillBytes)},
+    {"js/buffer.js", kJsBufferBytes, sizeof(kJsBufferBytes)},
+  };
+  return install_bootstrap_js(k_core_bootstrap_js);
+}
+
+bool Host::install_bootstrap_js(std::span<const EmbeddedJs> scripts)
+{
+  for (const EmbeddedJs& script : scripts) {
+    std::string src{reinterpret_cast<const char*>(script.bytes), script.size};
+    qjs::Value ret = ctx.eval(src, script.name, JS_EVAL_TYPE_GLOBAL);
+    if (ret.is_exception()) {
+      spdlog::error("bootstrap failed: {}", script.name);
+      ctx.dump_exception();
+      return false;
+    }
+  }
+  drain_jobs();
   return true;
 }
 

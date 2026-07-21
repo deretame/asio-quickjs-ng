@@ -4,7 +4,6 @@
 #include <string>
 
 #include "crypto.hpp"
-#include "fetch.hpp"
 #include "host.hpp"
 #include "qjs.hpp"
 
@@ -18,10 +17,7 @@ bool setup_host(Host& host)
   if (!host.install_runtime()) {
     return false;
   }
-  if (!crypto_api::install(host)) {
-    return false;
-  }
-  return fetch_api::install(host);
+  return crypto_api::install(host);
 }
 
 std::string js_str(qjs::Value v)
