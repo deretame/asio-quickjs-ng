@@ -174,81 +174,48 @@ void clear_timeout_fn(Host* host, int32_t id)
   host->cancel_timer(id);
 }
 
-// Base64 helpers.
+#include <openssl/evp.h>
+
 std::string base64_encode_bytes(const uint8_t* data, size_t len)
 {
-  static const char table[] =
-    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-  std::string out;
-  out.reserve(((len + 2) / 3) * 4);
-  size_t i = 0;
-  while (i + 3 <= len) {
-    uint32_t b = (static_cast<uint32_t>(data[i]) << 16) |
-      (static_cast<uint32_t>(data[i + 1]) << 8) |
-      static_cast<uint32_t>(data[i + 2]);
-    out.push_back(table[(b >> 18) & 0x3F]);
-    out.push_back(table[(b >> 12) & 0x3F]);
-    out.push_back(table[(b >> 6) & 0x3F]);
-    out.push_back(table[b & 0x3F]);
-    i += 3;
+  if (len == 0) {
+    return {};
   }
-  if (i < len) {
-    uint32_t b = static_cast<uint32_t>(data[i]) << 16;
-    if (i + 1 < len) {
-      b |= static_cast<uint32_t>(data[i + 1]) << 8;
-    }
-    out.push_back(table[(b >> 18) & 0x3F]);
-    out.push_back(table[(b >> 12) & 0x3F]);
-    if (i + 1 < len) {
-      out.push_back(table[(b >> 6) & 0x3F]);
-    } else {
-      out.push_back('=');
-    }
-    out.push_back('=');
+  size_t encoded_len = ((len + 2) / 3) * 4;
+  std::string out(encoded_len + 1, '\0');
+  int actual_len = EVP_EncodeBlock(
+    reinterpret_cast<unsigned char*>(out.data()),
+    data,
+    static_cast<int>(len));
+  if (actual_len < 0) {
+    throw std::runtime_error("base64 encode failed");
   }
+  out.resize(static_cast<size_t>(actual_len));
   return out;
 }
 
 std::vector<uint8_t> base64_decode_string(std::string_view s)
 {
-  static const int table[256] = {
-    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 62, -1, -1, -1, 63,
-    52, 53, 54, 55, 56, 57, 58, 59, 60, 61, -1, -1, -1, -1, -1, -1,
-    -1,  0,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14,
-    15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, -1, -1, -1, -1, -1,
-    -1, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40,
-    41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, -1, -1, -1, -1, -1,
-    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1
-  };
-  std::vector<uint8_t> out;
-  out.reserve((s.size() * 3) / 4);
-  int val = 0;
-  int valb = -8;
-  for (char ch : s) {
-    unsigned char c = static_cast<unsigned char>(ch);
-    if (c == '=') {
-      break;
-    }
-    int idx = table[c];
-    if (idx < 0) {
-      continue;
-    }
-    val = (val << 6) + idx;
-    valb += 6;
-    if (valb >= 0) {
-      out.push_back(static_cast<uint8_t>((val >> valb) & 0xFF));
-      valb -= 8;
+  if (s.empty()) {
+    return {};
+  }
+  size_t max_len = (s.size() + 3) / 4 * 3;
+  std::vector<uint8_t> out(max_len);
+  int len = EVP_DecodeBlock(
+    out.data(),
+    reinterpret_cast<const unsigned char*>(s.data()),
+    static_cast<int>(s.size()));
+  if (len < 0) {
+    throw std::runtime_error("base64 decode failed");
+  }
+  size_t padding = 0;
+  if (!s.empty() && s[s.size() - 1] == '=') {
+    ++padding;
+    if (s.size() >= 2 && s[s.size() - 2] == '=') {
+      ++padding;
     }
   }
+  out.resize(static_cast<size_t>(len) - padding);
   return out;
 }
 
