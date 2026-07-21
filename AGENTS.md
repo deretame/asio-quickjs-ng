@@ -23,6 +23,7 @@ Current implemented features:
 - WPT-style fetch test runner for official Web Platform Tests.
 - Dynamic function registry: register C++ functions from C++ and call them from JS via `call(name, ...args)`. Supports both sync (`Host::register_function`) and async (`Host::register_async_function`) handlers. Functions can also be registered globally (`Host::register_global_function`, `FunctionRegistry::register_global_function`) and are shared across all Host instances; the global registry is protected by a `std::shared_mutex` read-write lock so multiple Host instances can safely use it concurrently. Registered callbacks can optionally receive a `Host*` parameter to identify the caller, which is useful for per-instance data isolation (`src/function_registry.hpp/.cpp`).
 - A unique ID per `Host` instance, defaulting to UUID v4; optionally supplied via `Host(std::string id)`. Exposed to JS as `globalThis.__hostID`.
+- Host job scheduler (`HostManager` in `src/host_manager.*`, wire types in `src/job.hpp`): create Hosts, `submit(host_id, fn, args)` from any thread, oneshot result, soft cancel. Design: `docs/host-job-scheduler.md`.
 
 Planned (not yet implemented):
 
@@ -60,6 +61,8 @@ asio-quickjs-ng/
 ├── vcpkg/                  # Local vcpkg clone (ignored by git)
 ├── src/
 │   ├── host.hpp/.cpp       # Runtime: io_context, QuickJS, pending-op counter, and main loop
+│   ├── host_manager.hpp/.cpp # Multi-Host manager: submit/cancel jobs by host_id
+│   ├── job.hpp             # Job/Result wire types (no JSValue across Host boundary)
 │   ├── curl_runtime.hpp/.cpp # libcurl multi-handle driver: socket/timer watches (per-request lifetime)
 │   ├── fetch.hpp/.cpp      # __nativeFetch, async_fetch, embedded JS bootstrap
 │   ├── crypto.hpp/.cpp     # OpenSSL-backed crypto primitives exposed to JS
@@ -150,6 +153,7 @@ cmake --build build -j
 | `test_crypto` | `build/test_crypto.exe` | Crypto module tests. |
 | `test_json` | `build/test_json.exe` | JSON library sanity tests. |
 | `test_host_id` | `build/test_host_id.exe` | Per-instance Host ID tests. |
+| `test_host_manager` | `build/test_host_manager.exe` | HostManager submit/cancel tests. |
 | `test_wpt_fetch` | `build/test_wpt_fetch.exe` | Official WPT fetch runner. |
 
 ### Run the demo

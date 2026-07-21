@@ -282,6 +282,18 @@ void Host::cancel_timer(int32_t id)
   }
 }
 
+void Host::cancel_all_timers()
+{
+  std::vector<int32_t> ids;
+  ids.reserve(active_timers_.size());
+  for (const auto& [id, _] : active_timers_) {
+    ids.push_back(id);
+  }
+  for (int32_t id : ids) {
+    cancel_timer(id);
+  }
+}
+
 bool Host::erase_timer_if_active(int32_t id)
 {
   auto it = active_timers_.find(id);

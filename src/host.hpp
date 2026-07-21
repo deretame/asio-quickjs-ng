@@ -126,6 +126,7 @@ struct Host {
   // Timer registry for setTimeout / setInterval / clearTimeout / clearInterval.
   int32_t register_timer(std::shared_ptr<asio::steady_timer> timer);
   void cancel_timer(int32_t id);
+  void cancel_all_timers();
   bool erase_timer_if_active(int32_t id);
   bool timer_is_active(int32_t id) const;
 

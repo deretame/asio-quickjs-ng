@@ -53,6 +53,7 @@ add_library(asio_qjs_core
   src/curl_runtime.cpp
   src/crypto.cpp
   src/host.cpp
+  src/host_manager.cpp
   src/fetch.cpp
   src/function_registry.cpp
 )
@@ -132,6 +133,7 @@ if(ASIO_QJS_BUILD_TESTS)
   add_qjs_gtest(test_fetch tests/test_fetch.cpp)
   add_qjs_gtest(test_json tests/test_json.cpp)
   add_qjs_gtest(test_host_id tests/test_host_id.cpp)
+  add_qjs_gtest(test_host_manager tests/test_host_manager.cpp)
   add_qjs_gtest(test_base64 tests/test_base64.cpp)
   add_qjs_gtest(test_crypto tests/test_crypto.cpp)
 
