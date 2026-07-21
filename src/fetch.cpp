@@ -6,7 +6,9 @@
 
 #include <string>
 #include <string_view>
+#include <cstring>
 #include <utility>
+#include <vector>
 
 #include "curl_runtime.hpp"
 #include "js_embedded.hpp"
@@ -39,6 +41,39 @@ constexpr EmbeddedJs kBootstrapJs[] = {
   {"js/response.js", kJsResponseBytes, sizeof(kJsResponseBytes)},
   {"js/fetch.js", kJsFetchBytes, sizeof(kJsFetchBytes)},
 };
+
+std::vector<uint8_t> js_prop_bytes(JSContext* ctx, JSValueConst obj, const char* name)
+{
+  JSValue v = JS_GetPropertyStr(ctx, obj, name);
+  if (JS_IsUndefined(v) || JS_IsNull(v) || JS_IsException(v)) {
+    JS_FreeValue(ctx, v);
+    return {};
+  }
+
+  size_t size = 0;
+  uint8_t* data = nullptr;
+  if (JS_IsArrayBuffer(v)) {
+    data = JS_GetArrayBuffer(ctx, &size, v);
+  } else {
+    data = JS_GetUint8Array(ctx, &size, v);
+  }
+  if (data) {
+    std::vector<uint8_t> out(data, data + size);
+    JS_FreeValue(ctx, v);
+    return out;
+  }
+
+  const char* s = JS_ToCString(ctx, v);
+  JS_FreeValue(ctx, v);
+  if (!s) {
+    return {};
+  }
+  std::vector<uint8_t> out(
+    reinterpret_cast<const uint8_t*>(s),
+    reinterpret_cast<const uint8_t*>(s) + std::strlen(s));
+  JS_FreeCString(ctx, s);
+  return out;
+}
 
 std::string js_prop_string(JSContext* ctx, JSValueConst obj, const char* name)
 {
@@ -73,7 +108,7 @@ FetchOptions parse_options(JSContext* ctx, JSValueConst opts)
   if (o.method.empty()) {
     o.method = "GET";
   }
-  o.body = js_prop_string(ctx, opts, "body");
+  o.body = js_prop_bytes(ctx, opts, "body");
 
   JSValue follow = JS_GetPropertyStr(ctx, opts, "followRedirects");
   if (JS_IsBool(follow)) {
@@ -119,7 +154,7 @@ FetchOptions parse_options(JSContext* ctx, JSValueConst opts)
   return o;
 }
 
-qjs::Value make_raw_result(Host* host, const FetchResult& r)
+qjs::Value make_raw_result(Host* host, FetchResult&& r)
 {
   JSContext* ctx = host->js_raw();
   qjs::Value o = host->ctx.object();
@@ -127,7 +162,7 @@ qjs::Value make_raw_result(Host* host, const FetchResult& r)
   o.set("status", host->ctx.new_int32(static_cast<int32_t>(r.status)));
   o.set("statusText", host->ctx.new_string(r.status_text));
   o.set("url", host->ctx.new_string(r.url));
-  o.set("body", host->ctx.new_string(r.body));
+  o.set("body", qjs::new_uint8_array(ctx, std::move(r.body)));
   o.set("redirected", host->ctx.new_bool(r.redirected));
   o.set("aborted", host->ctx.new_bool(r.aborted));
   if (!r.error.empty()) {
@@ -159,7 +194,7 @@ Lazy<void> native_fetch_coro(
 
   host->fetch_transfers.erase(id);
 
-  qjs::Value raw = make_raw_result(host, result);
+  qjs::Value raw = make_raw_result(host, std::move(result));
   qjs::Value ret = resolve.call(raw);
   if (ret.is_exception()) {
     host->ctx.dump_exception();

@@ -168,7 +168,7 @@
       url: url,
       method: request.method,
       headers: headersToPairs(request.headers),
-      body: request._body == null ? '' : request._body,
+      body: request._body,
       followRedirects: follow,
       failOnRedirect: request.redirect === 'error',
     };

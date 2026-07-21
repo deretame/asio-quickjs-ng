@@ -50,21 +50,21 @@
 
   function extractBody(body) {
     if (body == null) {
-      return { text: null, contentType: null, stream: null };
+      return { bytes: null, contentType: null, stream: null };
     }
     if (
       typeof global.ReadableStream === 'function' &&
       body instanceof global.ReadableStream
     ) {
       // Stream body: no default Content-Type (WPT request-init-contenttype).
-      return { text: '', contentType: null, stream: body };
+      return { bytes: null, contentType: null, stream: body };
     }
     if (typeof body === 'string') {
-      return { text: body, contentType: 'text/plain;charset=UTF-8', stream: null };
+      return { bytes: body, contentType: 'text/plain;charset=UTF-8', stream: null };
     }
     if (typeof global.Blob === 'function' && body instanceof global.Blob) {
       return {
-        text: body._data != null ? body._data : '',
+        bytes: body._data != null ? body._data : '',
         contentType: body.type || null,
         stream: null,
       };
@@ -74,36 +74,30 @@
       body instanceof global.URLSearchParams
     ) {
       return {
-        text: body.toString(),
+        bytes: body.toString(),
         contentType: 'application/x-www-form-urlencoded;charset=UTF-8',
         stream: null,
       };
     }
     if (typeof global.FormData === 'function' && body instanceof global.FormData) {
       return {
-        text: body._toMultipart(),
+        bytes: body._toMultipart(),
         contentType: 'multipart/form-data; boundary=' + body._boundary,
         stream: null,
       };
     }
     if (body instanceof ArrayBuffer) {
-      var v = new Uint8Array(body);
-      var s = '';
-      for (var i = 0; i < v.length; ++i) {
-        s += String.fromCharCode(v[i]);
-      }
-      return { text: s, contentType: null, stream: null };
+      return { bytes: new Uint8Array(body), contentType: null, stream: null };
     }
     if (ArrayBuffer.isView && ArrayBuffer.isView(body)) {
-      var u8 = new Uint8Array(body.buffer, body.byteOffset, body.byteLength);
-      var s2 = '';
-      for (var j = 0; j < u8.length; ++j) {
-        s2 += String.fromCharCode(u8[j]);
-      }
-      return { text: s2, contentType: null, stream: null };
+      return {
+        bytes: new Uint8Array(body.buffer, body.byteOffset, body.byteLength),
+        contentType: null,
+        stream: null,
+      };
     }
     return {
-      text: String(body),
+      bytes: String(body),
       contentType: 'text/plain;charset=UTF-8',
       stream: null,
     };
@@ -256,9 +250,9 @@
 
       var extracted =
         body == null || body === undefined
-          ? { text: null, contentType: null, stream: null }
+          ? { bytes: null, contentType: null, stream: null }
           : extractBody(body);
-      this._body = extracted.text;
+      this._body = extracted.bytes;
       if (extracted.contentType && !headers.has('content-type')) {
         headers.append('content-type', extracted.contentType);
       }
@@ -349,6 +343,9 @@
 
     arrayBuffer() {
       return this._consume().then(function (s) {
+        if (s instanceof Uint8Array) {
+          return s.buffer.slice(s.byteOffset, s.byteOffset + s.byteLength);
+        }
         var utf8 = unescape(encodeURIComponent(s));
         var buf = new ArrayBuffer(utf8.length);
         var view = new Uint8Array(buf);
@@ -386,7 +383,12 @@
     }
 
     text() {
-      return this._consume();
+      return this._consume().then(function (s) {
+        if (s instanceof Uint8Array) {
+          return new TextDecoder().decode(s);
+        }
+        return s;
+      });
     }
 
     _setBodyUsed(v) {
@@ -425,8 +427,12 @@
       if (ct2.indexOf('application/x-www-form-urlencoded') >= 0) {
         this._setBodyUsed(true);
         var fd = new global.FormData();
-        if (this._body) {
-          this._body.split('&').forEach(function (part) {
+        var text =
+          this._body instanceof Uint8Array
+            ? new TextDecoder().decode(this._body)
+            : this._body;
+        if (text) {
+          text.split('&').forEach(function (part) {
             if (!part) return;
             var eq = part.indexOf('=');
             if (eq < 0) fd.append(decodeURIComponent(part), '');

@@ -245,8 +245,12 @@ size_t Transfer::write_cb(
 )
 {
   auto* self = static_cast<Transfer*>(userdata);
-  self->body.append(ptr, size * nmemb);
-  return size * nmemb;
+  size_t len = size * nmemb;
+  self->body.insert(
+    self->body.end(),
+    reinterpret_cast<const uint8_t*>(ptr),
+    reinterpret_cast<const uint8_t*>(ptr) + len);
+  return len;
 }
 
 size_t Transfer::header_cb(
@@ -351,20 +355,26 @@ bool Transfer::start()
     easy.setopt(CURLOPT_NOBODY, 1L);
   } else if (method == "POST") {
     easy.setopt(CURLOPT_POST, 1L);
-    easy.setopt(CURLOPT_POSTFIELDS, options.body.c_str());
+    easy.setopt(
+      CURLOPT_POSTFIELDS,
+      reinterpret_cast<const char*>(options.body.data()));
     easy.setopt(
       CURLOPT_POSTFIELDSIZE_LARGE,
       static_cast<curl_off_t>(options.body.size()));
   } else if (method == "PUT") {
     easy.setopt(CURLOPT_CUSTOMREQUEST, "PUT");
-    easy.setopt(CURLOPT_POSTFIELDS, options.body.c_str());
+    easy.setopt(
+      CURLOPT_POSTFIELDS,
+      reinterpret_cast<const char*>(options.body.data()));
     easy.setopt(
       CURLOPT_POSTFIELDSIZE_LARGE,
       static_cast<curl_off_t>(options.body.size()));
   } else {
     easy.setopt(CURLOPT_CUSTOMREQUEST, method.c_str());
     if (!options.body.empty()) {
-      easy.setopt(CURLOPT_POSTFIELDS, options.body.c_str());
+      easy.setopt(
+        CURLOPT_POSTFIELDS,
+        reinterpret_cast<const char*>(options.body.data()));
       easy.setopt(
         CURLOPT_POSTFIELDSIZE_LARGE,
         static_cast<curl_off_t>(options.body.size()));

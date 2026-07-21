@@ -173,6 +173,112 @@ void clear_timeout_fn(Host* host, int32_t id)
   host->cancel_timer(id);
 }
 
+// Base64 helpers.
+std::string base64_encode_bytes(const uint8_t* data, size_t len)
+{
+  static const char table[] =
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+  std::string out;
+  out.reserve(((len + 2) / 3) * 4);
+  size_t i = 0;
+  while (i + 3 <= len) {
+    uint32_t b = (static_cast<uint32_t>(data[i]) << 16)
+                 | (static_cast<uint32_t>(data[i + 1]) << 8)
+                 | static_cast<uint32_t>(data[i + 2]);
+    out.push_back(table[(b >> 18) & 0x3F]);
+    out.push_back(table[(b >> 12) & 0x3F]);
+    out.push_back(table[(b >> 6) & 0x3F]);
+    out.push_back(table[b & 0x3F]);
+    i += 3;
+  }
+  if (i < len) {
+    uint32_t b = static_cast<uint32_t>(data[i]) << 16;
+    if (i + 1 < len) {
+      b |= static_cast<uint32_t>(data[i + 1]) << 8;
+    }
+    out.push_back(table[(b >> 18) & 0x3F]);
+    out.push_back(table[(b >> 12) & 0x3F]);
+    if (i + 1 < len) {
+      out.push_back(table[(b >> 6) & 0x3F]);
+    } else {
+      out.push_back('=');
+    }
+    out.push_back('=');
+  }
+  return out;
+}
+
+std::vector<uint8_t> base64_decode_string(std::string_view s)
+{
+  static const int table[256] = {
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 62, -1, -1, -1, 63,
+    52, 53, 54, 55, 56, 57, 58, 59, 60, 61, -1, -1, -1, -1, -1, -1,
+    -1,  0,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14,
+    15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, -1, -1, -1, -1, -1,
+    -1, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40,
+    41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1
+  };
+  std::vector<uint8_t> out;
+  out.reserve((s.size() * 3) / 4);
+  int val = 0;
+  int valb = -8;
+  for (char ch : s) {
+    unsigned char c = static_cast<unsigned char>(ch);
+    if (c == '=') {
+      break;
+    }
+    int idx = table[c];
+    if (idx < 0) {
+      continue;
+    }
+    val = (val << 6) + idx;
+    valb += 6;
+    if (valb >= 0) {
+      out.push_back(static_cast<uint8_t>((val >> valb) & 0xFF));
+      valb -= 8;
+    }
+  }
+  return out;
+}
+
+qjs::Value base64_encode_fn(Host* host, qjs::Value input)
+{
+  std::string out;
+  if (input.is_binary_view()) {
+    // Zero-copy path for binary input.
+    auto bytes = input.to_bytes();
+    out = base64_encode_bytes(bytes.data(), bytes.size());
+  } else if (input.is_string()) {
+    auto s = input.to_std_string();
+    if (!s) {
+      host->throw_type_error(
+        "base64.encode(data): failed to read string");
+    }
+    out = base64_encode_bytes(
+      reinterpret_cast<const uint8_t*>(s->data()),
+      s->size());
+  } else {
+    host->throw_type_error(
+      "base64.encode(data): data must be string, ArrayBuffer, or Uint8Array");
+  }
+  return host->ctx.new_string(out);
+}
+
+std::vector<uint8_t> base64_decode_fn(Host* host, std::string input)
+{
+  return base64_decode_string(input);
+}
+
 }  // namespace
 
 Host::Host()
@@ -281,6 +387,12 @@ bool Host::install_runtime()
   ctx.set_opaque(this);
   auto g = global();
   g.fn<&print_fn>("print");
+  g.obj(
+    "base64",
+    [](qjs::Value& b) {
+      b.fn<&base64_encode_fn>("encode");
+      b.fn<&base64_decode_fn>("decode");
+    });
   g.fn<&set_timeout_fn>("setTimeout");
   g.fn<&clear_timeout_fn>("clearTimeout");
   g.fn<&set_interval_fn>("setInterval");

@@ -3,7 +3,9 @@
 #include <spdlog/spdlog.h>
 
 #include <concepts>
+#include <cstring>
 #include <optional>
+#include <span>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -11,6 +13,7 @@
 #include <type_traits>
 #include <limits>
 #include <utility>
+#include <vector>
 
 extern "C" {
 #include "quickjs.h"
@@ -118,6 +121,7 @@ class Value {
   bool is_function() const { return ctx_ && JS_IsFunction(ctx_, v_); }
 
   bool is_undefined() const { return JS_IsUndefined(v_); }
+  bool is_string() const { return ctx_ && JS_IsString(v_); }
 
   static Value undefined() { return {}; }
 
@@ -184,6 +188,57 @@ class Value {
     return ctx_ && JS_ToInt32(ctx_, &out, v_) == 0;
   }
 
+  // Zero-copy binary helpers: read bytes from ArrayBuffer or Uint8Array.
+  bool is_array_buffer() const { return ctx_ && JS_IsArrayBuffer(v_); }
+
+  bool is_uint8_array() const
+  {
+    if (!ctx_) {
+      return false;
+    }
+    size_t size = 0;
+    return JS_GetUint8Array(ctx_, &size, v_) != nullptr;
+  }
+
+  bool is_binary_view() const { return is_array_buffer() || is_uint8_array(); }
+
+  std::span<const uint8_t> to_bytes() const
+  {
+    if (!ctx_) {
+      return {};
+    }
+    size_t size = 0;
+    uint8_t* data = nullptr;
+    if (JS_IsArrayBuffer(v_)) {
+      data = JS_GetArrayBuffer(ctx_, &size, v_);
+    } else {
+      data = JS_GetUint8Array(ctx_, &size, v_);
+    }
+    if (!data) {
+      return {};
+    }
+    return {data, size};
+  }
+
+  // Create a Uint8Array that owns a copy of `data`.
+  static Value new_uint8_array_copy(JSContext* ctx, const uint8_t* data, size_t len)
+  {
+    return take(ctx, JS_NewUint8ArrayCopy(ctx, data, len));
+  }
+
+  // Create a Uint8Array backed by externally owned memory.
+  // `free_func` will be called when the JS object is collected.
+  static Value new_uint8_array(
+    JSContext* ctx,
+    uint8_t* data,
+    size_t len,
+    JSFreeArrayBufferDataFunc* free_func,
+    void* opaque
+    )
+  {
+    return take(ctx, JS_NewUint8Array(ctx, data, len, free_func, opaque, false));
+  }
+
   void set(const char* name, Value value)
   {
     JS_SetPropertyStr(ctx_, v_, name, value.release());
@@ -211,6 +266,26 @@ class Value {
   JSContext* ctx_ = nullptr;
   JSValue v_ = JS_UNDEFINED;
 };
+
+// Free function used by new_uint8_array_vector below.
+inline void free_vector_owned_buffer(JSRuntime* rt, void* opaque, void* ptr)
+{
+  auto* vec = static_cast<std::vector<uint8_t>*>(opaque);
+  delete vec;
+}
+
+// Create a Uint8Array that takes ownership of an std::vector<uint8_t>.
+// The vector is deleted when the JS object is garbage collected.
+inline Value new_uint8_array(JSContext* ctx, std::vector<uint8_t> data)
+{
+  auto* vec = new std::vector<uint8_t>(std::move(data));
+  return Value::new_uint8_array(
+    ctx,
+    vec->data(),
+    vec->size(),
+    &free_vector_owned_buffer,
+    vec);
+}
 
 inline Value Ctx::object() const
 {
@@ -295,6 +370,10 @@ struct is_js_value_type<Value> : std::true_type {};
 template <>
 struct is_js_value_type<std::string> : std::true_type {};
 template <>
+struct is_js_value_type<std::span<const uint8_t>> : std::true_type {};
+template <>
+struct is_js_value_type<std::vector<uint8_t>> : std::true_type {};
+template <>
 struct is_js_value_type<bool> : std::true_type {};
 template <>
 struct is_js_value_type<int32_t> : std::true_type {};
@@ -355,6 +434,57 @@ inline std::string from_js(JSContext* ctx, JSValueConst v)
     throw ConvertError{};
   }
   std::string out(s);
+  JS_FreeCString(ctx, s);
+  return out;
+}
+
+// Zero-copy binary view: only accepts ArrayBuffer / Uint8Array.
+// The span is valid only for the duration of the synchronous call.
+template <typename T>
+requires std::same_as<T, std::span<const uint8_t>>
+inline std::span<const uint8_t> from_js(JSContext* ctx, JSValueConst v)
+{
+  size_t size = 0;
+  uint8_t* data = nullptr;
+  if (JS_IsArrayBuffer(v)) {
+    data = JS_GetArrayBuffer(ctx, &size, v);
+  } else {
+    data = JS_GetUint8Array(ctx, &size, v);
+  }
+  if (!data) {
+    JS_ThrowTypeError(
+      ctx,
+      "expected ArrayBuffer or Uint8Array");
+    throw ConvertError{};
+  }
+  return {data, size};
+}
+
+// Copying binary input: accepts ArrayBuffer / Uint8Array / string.
+template <typename T>
+requires std::same_as<T, std::vector<uint8_t>>
+inline std::vector<uint8_t> from_js(JSContext* ctx, JSValueConst v)
+{
+  size_t size = 0;
+  uint8_t* data = nullptr;
+  if (JS_IsArrayBuffer(v)) {
+    data = JS_GetArrayBuffer(ctx, &size, v);
+  } else {
+    data = JS_GetUint8Array(ctx, &size, v);
+  }
+  if (data) {
+    return std::vector<uint8_t>(data, data + size);
+  }
+  const char* s = JS_ToCString(ctx, v);
+  if (!s) {
+    JS_ThrowTypeError(
+      ctx,
+      "expected ArrayBuffer, Uint8Array, or string");
+    throw ConvertError{};
+  }
+  std::vector<uint8_t> out(
+    reinterpret_cast<const uint8_t*>(s),
+    reinterpret_cast<const uint8_t*>(s) + std::strlen(s));
   JS_FreeCString(ctx, s);
   return out;
 }
@@ -469,6 +599,12 @@ JSValue to_js(JSContext* ctx, R&& r)
     return JS_NewInt64(ctx, static_cast<int64_t>(r));
   } else if constexpr (std::same_as<T, int64_t>) {
     return JS_NewBigInt64(ctx, r);
+  } else if constexpr (std::same_as<T, std::vector<uint8_t>>) {
+    // Transfer ownership to JS as a Uint8Array (no extra copy).
+    return qjs::new_uint8_array(ctx, std::move(r)).release();
+  } else if constexpr (std::same_as<T, std::span<const uint8_t>>) {
+    // Span is non-owning: must copy to a new Uint8Array.
+    return Value::new_uint8_array_copy(ctx, r.data(), r.size()).release();
   }
 }
 

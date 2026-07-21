@@ -3,8 +3,10 @@
 
 #include <chrono>
 #include <cstdio>
+#include <cstring>
 #include <filesystem>
 #include <string>
+#include <vector>
 
 #include "curl_http.hpp"
 #include "fetch.hpp"
@@ -232,11 +234,16 @@ TEST(FetchCpp, AsyncOptionsPost) {
   curl_http::FetchOptions opt;
   opt.url = server.origin() + "/echo";
   opt.method = "POST";
-  opt.body = "cpp-body";
+  std::string_view body_sv = "cpp-body";
+  opt.body.assign(body_sv.begin(), body_sv.end());
   opt.headers.push_back({"Content-Type", "text/plain"});
   auto r = host.block_on(fetch_api::async_fetch(host, std::move(opt)));
   EXPECT_TRUE(r.ok);
-  EXPECT_EQ(r.body, "cpp-body");
+  EXPECT_EQ(
+    std::string(
+      reinterpret_cast<const char*>(r.body.data()),
+      r.body.size()),
+    "cpp-body");
   host.shutdown();
   server.stop();
 }

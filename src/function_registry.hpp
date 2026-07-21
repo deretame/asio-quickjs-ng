@@ -96,6 +96,9 @@ qjs::Value to_value(JSContext* ctx, R&& r)
     return qjs::Value::take(ctx, JS_NewInt64(ctx, static_cast<int64_t>(r)));
   } else if constexpr (std::same_as<T, int64_t>) {
     return qjs::Value::take(ctx, JS_NewBigInt64(ctx, r));
+  } else if constexpr (std::same_as<T, std::vector<uint8_t>>) {
+    // Transfer ownership to JS as a Uint8Array (no extra copy).
+    return qjs::new_uint8_array(ctx, std::move(r));
   } else {
     static_assert(std::false_type::value, "unsupported return type");
   }

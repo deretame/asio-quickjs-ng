@@ -129,6 +129,7 @@ if(ASIO_QJS_BUILD_TESTS)
   add_qjs_gtest(test_fetch tests/test_fetch.cpp)
   add_qjs_gtest(test_json tests/test_json.cpp)
   add_qjs_gtest(test_host_id tests/test_host_id.cpp)
+  add_qjs_gtest(test_base64 tests/test_base64.cpp)
 
   add_executable(test_wpt_fetch tests/test_wpt_fetch.cpp)
   target_link_libraries(test_wpt_fetch PRIVATE GTest::gtest_main asio_qjs_core)

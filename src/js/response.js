@@ -7,22 +7,39 @@
     return status === 204 || status === 205 || status === 304;
   }
 
+  function stringToBytes(s) {
+    var utf8 = unescape(encodeURIComponent(s));
+    var buf = new Uint8Array(utf8.length);
+    for (var i = 0; i < utf8.length; ++i) {
+      buf[i] = utf8.charCodeAt(i) & 0xff;
+    }
+    return buf;
+  }
+
+  function latin1ToBytes(s) {
+    var buf = new Uint8Array(s.length);
+    for (var i = 0; i < s.length; ++i) {
+      buf[i] = s.charCodeAt(i) & 0xff;
+    }
+    return buf;
+  }
+
   function extractBody(body) {
     if (body == null) {
-      return { text: null, contentType: null };
+      return { bytes: null, contentType: null };
     }
     if (
       typeof global.ReadableStream === 'function' &&
       body instanceof global.ReadableStream
     ) {
-      return { text: '', contentType: null, stream: body };
+      return { bytes: null, contentType: null, stream: body };
     }
     if (typeof body === 'string') {
-      return { text: body, contentType: 'text/plain;charset=UTF-8' };
+      return { bytes: stringToBytes(body), contentType: 'text/plain;charset=UTF-8' };
     }
     if (typeof global.Blob === 'function' && body instanceof global.Blob) {
       return {
-        text: body._data != null ? body._data : '',
+        bytes: latin1ToBytes(body._data != null ? body._data : ''),
         contentType: body.type || null,
       };
     }
@@ -31,33 +48,23 @@
       body instanceof global.URLSearchParams
     ) {
       return {
-        text: body.toString(),
+        bytes: stringToBytes(body.toString()),
         contentType: 'application/x-www-form-urlencoded;charset=UTF-8',
       };
     }
     if (typeof global.FormData === 'function' && body instanceof global.FormData) {
       return {
-        text: body._toMultipart(),
+        bytes: stringToBytes(body._toMultipart()),
         contentType: 'multipart/form-data; boundary=' + body._boundary,
       };
     }
     if (body instanceof ArrayBuffer) {
-      var v = new Uint8Array(body);
-      var s = '';
-      for (var i = 0; i < v.length; ++i) {
-        s += String.fromCharCode(v[i]);
-      }
-      return { text: s, contentType: null };
+      return { bytes: new Uint8Array(body), contentType: null };
     }
     if (ArrayBuffer.isView && ArrayBuffer.isView(body)) {
-      var u8 = new Uint8Array(body.buffer, body.byteOffset, body.byteLength);
-      var s2 = '';
-      for (var j = 0; j < u8.length; ++j) {
-        s2 += String.fromCharCode(u8[j]);
-      }
-      return { text: s2, contentType: null };
+      return { bytes: new Uint8Array(body.buffer, body.byteOffset, body.byteLength), contentType: null };
     }
-    return { text: String(body), contentType: 'text/plain;charset=UTF-8' };
+    return { bytes: stringToBytes(String(body)), contentType: 'text/plain;charset=UTF-8' };
   }
 
   class Response {
@@ -96,7 +103,7 @@
         throw new TypeError('Response with null body status cannot have body');
       } else {
         var extracted = extractBody(body);
-        this._body = extracted.text;
+        this._body = extracted.bytes;
         this.body = extracted.stream
           ? extracted.stream
           : typeof global.ReadableStream === 'function'
@@ -150,24 +157,27 @@
       return null;
     }
 
-    // Null body: resolve empty and do NOT set bodyUsed (WPT response-consume-empty).
-    _consumeString() {
-      var aborted = this._checkAbort();
-      if (aborted) {
-        return aborted;
-      }
-      if (this._body === null) {
-        return Promise.resolve('');
-      }
+    _consume() {
       if (this.bodyUsed) {
         return Promise.reject(new TypeError('Already read'));
+      }
+      if (this._body === null) {
+        return Promise.resolve(null);
       }
       this.bodyUsed = true;
       return Promise.resolve(this._body);
     }
 
     text() {
-      return this._consumeString();
+      var aborted = this._checkAbort();
+      if (aborted) {
+        return aborted;
+      }
+      return this._consume().then(function (bytes) {
+        if (bytes === null) return '';
+        var decoder = new TextDecoder();
+        return decoder.decode(bytes);
+      });
     }
 
     json() {
@@ -182,8 +192,9 @@
         return Promise.reject(new TypeError('Already read'));
       }
       this.bodyUsed = true;
+      var decoder = new TextDecoder();
       try {
-        return Promise.resolve(JSON.parse(this._body));
+        return Promise.resolve(JSON.parse(decoder.decode(this._body)));
       } catch (e) {
         return Promise.reject(e);
       }
@@ -194,21 +205,13 @@
       if (aborted) {
         return aborted;
       }
-      if (this._body === null) {
-        return Promise.resolve(new ArrayBuffer(0));
-      }
-      if (this.bodyUsed) {
-        return Promise.reject(new TypeError('Already read'));
-      }
-      this.bodyUsed = true;
-      var s = this._body;
-      var utf8 = unescape(encodeURIComponent(s));
-      var buf = new ArrayBuffer(utf8.length);
-      var view = new Uint8Array(buf);
-      for (var i = 0; i < utf8.length; ++i) {
-        view[i] = utf8.charCodeAt(i) & 0xff;
-      }
-      return Promise.resolve(buf);
+      return this._consume().then(function (bytes) {
+        if (bytes === null) return new ArrayBuffer(0);
+        return bytes.buffer.slice(
+          bytes.byteOffset,
+          bytes.byteOffset + bytes.byteLength
+        );
+      });
     }
 
     blob() {
@@ -216,15 +219,12 @@
       if (aborted) {
         return aborted;
       }
-      var type = this.headers.get('content-type') || '';
-      if (this._body === null) {
-        return Promise.resolve(new global.Blob([], { type: type }));
-      }
-      if (this.bodyUsed) {
-        return Promise.reject(new TypeError('Already read'));
-      }
-      this.bodyUsed = true;
-      return Promise.resolve(new global.Blob([this._body], { type: type }));
+      var self = this;
+      return this._consume().then(function (bytes) {
+        var type = self.headers.get('content-type') || '';
+        if (bytes === null) return new global.Blob([], { type: type });
+        return new global.Blob([bytes], { type: type });
+      });
     }
 
     bytes() {
@@ -232,20 +232,10 @@
       if (aborted) {
         return aborted;
       }
-      if (this._body === null) {
-        return Promise.resolve(new Uint8Array(0));
-      }
-      if (this.bodyUsed) {
-        return Promise.reject(new TypeError('Already read'));
-      }
-      this.bodyUsed = true;
-      var s = this._body;
-      var utf8 = unescape(encodeURIComponent(s));
-      var view = new Uint8Array(utf8.length);
-      for (var i = 0; i < utf8.length; ++i) {
-        view[i] = utf8.charCodeAt(i) & 0xff;
-      }
-      return Promise.resolve(view);
+      return this._consume().then(function (bytes) {
+        if (bytes === null) return new Uint8Array(0);
+        return bytes;
+      });
     }
 
     formData() {
@@ -267,10 +257,9 @@
       if (ct2.indexOf('application/x-www-form-urlencoded') >= 0) {
         this.bodyUsed = true;
         var fd = new global.FormData();
-        var usp = new global.URLSearchParams(this._body);
-        // URLSearchParams polyfill may not iterate   parse manually
-        if (this._body) {
-          this._body.split('&').forEach(function (part) {
+        var text = new TextDecoder().decode(this._body);
+        if (text) {
+          text.split('&').forEach(function (part) {
             if (!part) return;
             var eq = part.indexOf('=');
             if (eq < 0) fd.append(decodeURIComponent(part), '');

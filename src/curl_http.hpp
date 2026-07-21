@@ -23,7 +23,7 @@ struct FetchOptions {
   std::string url;
   std::string method = "GET";
   std::vector<HeaderPair> headers;
-  std::string body;
+  std::vector<uint8_t> body;
   bool follow_redirects = true;
   long timeout_sec = 30;
   // When true, a 3xx final status is treated as network failure (redirect:
@@ -36,7 +36,7 @@ struct FetchResult {
   bool ok = false;
   long status = 0;
   std::string status_text;
-  std::string body;
+  std::vector<uint8_t> body;
   std::string url;
   std::string error;
   std::vector<HeaderPair> headers;
@@ -167,7 +167,7 @@ struct Transfer {
   Client* client = nullptr;
   Easy easy;
   FetchOptions options;
-  std::string body;
+  std::vector<uint8_t> body;
   std::vector<HeaderPair> response_headers;
   std::string status_text;
   char errbuf[CURL_ERROR_SIZE]{};
