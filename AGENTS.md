@@ -19,7 +19,7 @@ Current implemented features:
 - `crypto` module: hash/hmac (`md5`, `sha1`, `sha256`, `sha512`, `createHash`, `createHmac`), AES-ECB/CBC/GCM, `randomBytes`, `randomUUID`, `timingSafeEqual`, `pbkdf2`/`pbkdf2Sync` (C++ in `src/crypto.cpp`; JS wrapper in `src/js/crypto.js`).
 - Per-request `curl_http::Client` created inside `fetch_api::async_fetch` and discarded after the request completes.
 - `data:` and `about:` scheme handling in JS.
-- C++20 coroutine channels (`mpsc`, `oneshot`) in `src/channel.hpp`.
+- C++20 coroutine channels (`mpsc`, `oneshot`) in `src/channel.hpp` (thread-safe; `tx.send` non-blocking, `co_await rx.recv()`).
 - WPT-style fetch test runner for official Web Platform Tests.
 - Dynamic function registry: register C++ functions from C++ and call them from JS via `call(name, ...args)`. Supports both sync (`Host::register_function`) and async (`Host::register_async_function`) handlers. Functions can also be registered globally (`Host::register_global_function`, `FunctionRegistry::register_global_function`) and are shared across all Host instances; the global registry is protected by a `std::shared_mutex` read-write lock so multiple Host instances can safely use it concurrently. Registered callbacks can optionally receive a `Host*` parameter to identify the caller, which is useful for per-instance data isolation (`src/function_registry.hpp/.cpp`).
 - A unique ID per `Host` instance, defaulting to UUID v4; optionally supplied via `Host(std::string id)`. Exposed to JS as `globalThis.__hostID`.
@@ -66,7 +66,7 @@ asio-quickjs-ng/
 │   ├── function_registry.hpp/.cpp # Dynamic call(name, ...args) registry
 │   ├── curl_http.hpp       # libcurl Global/Easy/Multi/Transfer wrappers
 │   ├── asio_executor.hpp   # async_simple Executor → asio
-│   ├── channel.hpp         # C++20 coroutine mpsc/oneshot channels
+│   ├── channel.hpp         # Thread-safe C++20 coroutine mpsc/oneshot channels
 │   ├── qjs.hpp             # RAII wrappers around QuickJS C API + binding helpers
 │   ├── main.cpp            # CLI entry point: asio_qjs.exe
 │   └── js/                 # Embedded JS polyfills (bundled into js_embedded.hpp by cmake/embed_js.cmake)
@@ -230,7 +230,7 @@ The runner starts `tests/wpt/node_test_server.mjs` as a network fixture, reads `
 - **`curl_http::Client`** (`src/curl_runtime.hpp/.cpp`): owns one `curl_multi` handle, asio socket watches, and the timeout timer. A new `Client` is constructed for each fetch request, passed the `Host`'s `AsioExecutor`, and destroyed once the request finishes.
 - **`curl_http::Transfer`** (`src/curl_http.hpp`): represents one outbound HTTP request. Created per fetch call, added to its per-request `Client`, and deleted either by the Client's completion callback or by the JS abort path.
 - **`fetch_api`** (`src/fetch.hpp`): `async_fetch` (C++ coroutine) and `native_fetch_fn` / `native_fetch_abort_fn` (JS-facing C functions).
-- **Channels** (`src/channel.hpp`): `co::mpsc::unbounded<T>()` and `co::oneshot::channel<T>()` for coroutine-to-coroutine communication.
+- **Channels** (`src/channel.hpp`): thread-safe Tokio-style `co::mpsc::unbounded<T>()` and `co::oneshot::channel<T>()`. `send` is non-blocking and returns `bool`; `co_await rx.recv()` suspends the coroutine (and, when used inside `Lazy` with an executor, resumes via that executor).
 
 ### JS bootstrap order
 
