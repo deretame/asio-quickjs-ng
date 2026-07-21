@@ -19,10 +19,12 @@ set(JS_EMBED_FILES
   "${CMAKE_SOURCE_DIR}/src/js/text-encoding-polyfill.js"
   "${CMAKE_SOURCE_DIR}/src/js/whatwg-url-polyfill.js"
   "${CMAKE_SOURCE_DIR}/src/js/body_polyfill.js"
+  "${CMAKE_SOURCE_DIR}/src/js/buffer.js"
   "${CMAKE_SOURCE_DIR}/src/js/headers.js"
   "${CMAKE_SOURCE_DIR}/src/js/request.js"
   "${CMAKE_SOURCE_DIR}/src/js/response.js"
   "${CMAKE_SOURCE_DIR}/src/js/fetch.js"
+  "${CMAKE_SOURCE_DIR}/src/js/crypto.js"
 )
 set(JS_EMBED_HEADER_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
 set(JS_EMBED_HEADER "${JS_EMBED_HEADER_DIR}/js_embedded.hpp")
@@ -49,6 +51,7 @@ find_package(Boost REQUIRED COMPONENTS uuid)
 # --- core library (host + fetch layers) ---
 add_library(asio_qjs_core
   src/curl_runtime.cpp
+  src/crypto.cpp
   src/host.cpp
   src/fetch.cpp
   src/function_registry.cpp
@@ -130,6 +133,7 @@ if(ASIO_QJS_BUILD_TESTS)
   add_qjs_gtest(test_json tests/test_json.cpp)
   add_qjs_gtest(test_host_id tests/test_host_id.cpp)
   add_qjs_gtest(test_base64 tests/test_base64.cpp)
+  add_qjs_gtest(test_crypto tests/test_crypto.cpp)
 
   add_executable(test_wpt_fetch tests/test_wpt_fetch.cpp)
   target_link_libraries(test_wpt_fetch PRIVATE GTest::gtest_main asio_qjs_core)

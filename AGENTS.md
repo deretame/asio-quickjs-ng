@@ -12,8 +12,11 @@
 
 Current implemented features:
 
-- `setTimeout`, `clearTimeout`, `print`, `console.*` (in `src/host.cpp`).
+- `setTimeout`, `clearTimeout`, `setInterval`, `clearInterval`, `print`, `console.*` (in `src/host.cpp`).
 - `fetch` / `Request` / `Response` / `Headers` / `AbortController` (polyfills in `src/js/*.js`; C++ transport in `src/fetch.cpp`, `src/curl_http.hpp`, and `src/curl_runtime.cpp`).
+- `base64` / `base64.encode` / `base64.decode` (in `src/host.cpp`).
+- `Buffer` polyfill (in `src/js/buffer.js`).
+- `crypto` module: hash/hmac (`md5`, `sha1`, `sha256`, `sha512`, `createHash`, `createHmac`), AES-ECB/CBC/GCM, `randomBytes`, `randomUUID`, `timingSafeEqual`, `pbkdf2`/`pbkdf2Sync` (C++ in `src/crypto.cpp`; JS wrapper in `src/js/crypto.js`).
 - Per-request `curl_http::Client` created inside `fetch_api::async_fetch` and discarded after the request completes.
 - `data:` and `about:` scheme handling in JS.
 - C++20 coroutine channels (`mpsc`, `oneshot`) in `src/channel.hpp`.
@@ -24,7 +27,7 @@ Current implemented features:
 Planned (not yet implemented):
 
 - Inbound TCP / HTTP server APIs (`docs/server-runtime.md`).
-- `Buffer`, streams, and full Node-compatible modules.
+- Streams and full Node-compatible modules.
 
 ## Technology stack
 
@@ -59,6 +62,7 @@ asio-quickjs-ng/
 │   ├── host.hpp/.cpp       # Runtime: io_context, QuickJS, pending-op counter, and main loop
 │   ├── curl_runtime.hpp/.cpp # libcurl multi-handle driver: socket/timer watches (per-request lifetime)
 │   ├── fetch.hpp/.cpp      # __nativeFetch, async_fetch, embedded JS bootstrap
+│   ├── crypto.hpp/.cpp     # OpenSSL-backed crypto primitives exposed to JS
 │   ├── function_registry.hpp/.cpp # Dynamic call(name, ...args) registry
 │   ├── curl_http.hpp       # libcurl Global/Easy/Multi/Transfer wrappers
 │   ├── asio_executor.hpp   # async_simple Executor → asio
@@ -70,6 +74,8 @@ asio-quickjs-ng/
 │       ├── text-encoding-polyfill.js
 │       ├── whatwg-url-polyfill.js
 │       ├── body_polyfill.js
+│       ├── buffer.js
+│       ├── crypto.js
 │       ├── headers.js
 │       ├── request.js
 │       ├── response.js
@@ -78,6 +84,8 @@ asio-quickjs-ng/
 │   ├── test_channel.cpp
 │   ├── test_two_qjs.cpp
 │   ├── test_fetch.cpp       # Local fetch smoke tests (uses Node.js fixture server)
+│   ├── test_base64.cpp      # Base64 encode/decode and zero-copy convention tests
+│   ├── test_crypto.cpp      # Crypto module tests (hash, hmac, AES, random, pbkdf2)
 │   ├── test_function_registry.cpp
 │   ├── test_json.cpp
 │   ├── test_host_id.cpp
@@ -138,6 +146,8 @@ cmake --build build -j
 | `test_channel` | `build/test_channel.exe` | Channel tests. |
 | `test_two_qjs` | `build/test_two_qjs.exe` | Two-VM interop test. |
 | `test_fetch` | `build/test_fetch.exe` | Local fetch smoke tests. |
+| `test_base64` | `build/test_base64.exe` | Base64 and zero-copy binding tests. |
+| `test_crypto` | `build/test_crypto.exe` | Crypto module tests. |
 | `test_json` | `build/test_json.exe` | JSON library sanity tests. |
 | `test_host_id` | `build/test_host_id.exe` | Per-instance Host ID tests. |
 | `test_wpt_fetch` | `build/test_wpt_fetch.exe` | Official WPT fetch runner. |
@@ -170,6 +180,8 @@ Or run executables directly:
 .\build\test_two_qjs.exe
 .\build\test_json.exe
 .\build\test_fetch.exe
+.\build\test_base64.exe
+.\build\test_crypto.exe
 .\build\test_host_id.exe
 ```
 
@@ -226,12 +238,16 @@ At runtime, `fetch_api::install` loads these JS polyfills from the generated `bu
 
 1. `js/abort.js` — `AbortController`, `AbortSignal`, `DOMException`.
 2. `js/text-encoding-polyfill.js` — `TextEncoder` and `TextDecoder` globals from `fast-text-encoding` for polyfills that need them.
-3. `js/whatwg-url-polyfill.js` — full WHATWG `URL` and `URLSearchParams` (bundled from `core-js-pure/stable/url`, includes IDNA/Punycode handling; relies on the `TextEncoder`/`TextDecoder` polyfill loaded above).
-4. `js/body_polyfill.js` — minimal `Blob`, `URLSearchParams`, `FormData`, `URL`, `ReadableStream` (only fills gaps left by the previous polyfill).
-5. `js/headers.js` — `Headers` class.
-6. `js/request.js` — `Request` class.
-7. `js/response.js` — `Response` class.
-8. `js/fetch.js` — `fetch` global, uses `__nativeFetch` / `__nativeFetchAbort`.
+3. `js/whatwg-url-polyfill.js` — full WHATWG `URL` and `URLSearchParams`.
+4. `js/body_polyfill.js` — minimal `Blob`, `URLSearchParams`, `FormData`, `URL`, `ReadableStream`.
+5. `js/buffer.js` — minimal `Buffer` global.
+6. `js/headers.js` — `Headers` class.
+7. `js/request.js` — `Request` class.
+8. `js/response.js` — `Response` class.
+9. `js/fetch.js` — `fetch` global, uses `__nativeFetch` / `__nativeFetchAbort`.
+10. `js/crypto.js` — `crypto` global, uses `__nativeCrypto`.
+
+`crypto_api::install` must be called before `fetch_api::install` so that `__nativeCrypto` is available when `js/crypto.js` is loaded.
 
 If you edit a `.js` file, you must rebuild for `cmake/embed_js.cmake` to regenerate `build/generated/js_embedded.hpp`.
 
@@ -325,9 +341,10 @@ The binary is intentionally kept out of Git. A Windows x64 build can be download
 - To understand the runtime: `src/host.hpp`, `src/host.cpp`, `src/main.cpp`.
 - To understand fetch / curl integration: `src/fetch.hpp`, `src/fetch.cpp`, `src/curl_http.hpp`, `src/curl_runtime.hpp`, `src/curl_runtime.cpp`, `src/js/fetch.js`.
 - To understand JS bindings: `src/qjs.hpp`.
+- To understand crypto / Buffer: `src/crypto.hpp`, `src/crypto.cpp`, `src/js/crypto.js`, `src/js/buffer.js`.
 - To add inbound TCP/HTTP: see `docs/server-runtime.md`.
 - To update WPT results: `docs/wpt-fetch.md`, `docs/wpt-fetch-status.md`, `tests/wpt/manifest.txt`.
 
 ---
 
-*Last updated: 2026-07-20. Keep this file in sync with `CMakeLists.txt`, `vcpkg.json`, `docs/*.md`, and the `src/` layout when making structural changes.*
+*Last updated: 2026-07-21. Keep this file in sync with `CMakeLists.txt`, `vcpkg.json`, `docs/*.md`, and the `src/` layout when making structural changes.*

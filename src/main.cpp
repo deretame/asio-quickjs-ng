@@ -2,6 +2,7 @@
 #include <spdlog/spdlog.h>
 
 #include "curl_http.hpp"
+#include "crypto.hpp"
 #include "fetch.hpp"
 #include "host.hpp"
 
@@ -22,6 +23,10 @@ int main(int argc, char** argv)
   }
   if (!host.install_runtime()) {
     spdlog::error("install_runtime failed");
+    return 1;
+  }
+  if (!crypto_api::install(host)) {
+    spdlog::error("crypto install failed");
     return 1;
   }
   if (!fetch_api::install(host)) {

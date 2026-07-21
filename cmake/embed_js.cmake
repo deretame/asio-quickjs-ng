@@ -9,10 +9,12 @@ set(JS_FILES
   "${CMAKE_CURRENT_LIST_DIR}/../src/js/text-encoding-polyfill.js"
   "${CMAKE_CURRENT_LIST_DIR}/../src/js/whatwg-url-polyfill.js"
   "${CMAKE_CURRENT_LIST_DIR}/../src/js/body_polyfill.js"
+  "${CMAKE_CURRENT_LIST_DIR}/../src/js/buffer.js"
   "${CMAKE_CURRENT_LIST_DIR}/../src/js/headers.js"
   "${CMAKE_CURRENT_LIST_DIR}/../src/js/request.js"
   "${CMAKE_CURRENT_LIST_DIR}/../src/js/response.js"
   "${CMAKE_CURRENT_LIST_DIR}/../src/js/fetch.js"
+  "${CMAKE_CURRENT_LIST_DIR}/../src/js/crypto.js"
 )
 
 # Explicit filename -> C++ variable name mapping so that fetch.cpp and the
@@ -21,10 +23,12 @@ set(JS_VAR_NAME_abort.js "kJsAbortBytes")
 set(JS_VAR_NAME_text-encoding-polyfill.js "kJsTextEncodingPolyfillBytes")
 set(JS_VAR_NAME_whatwg-url-polyfill.js "kJsWhatwgUrlPolyfillBytes")
 set(JS_VAR_NAME_body_polyfill.js "kJsBodyPolyfillBytes")
+set(JS_VAR_NAME_buffer.js "kJsBufferBytes")
 set(JS_VAR_NAME_headers.js "kJsHeadersBytes")
 set(JS_VAR_NAME_request.js "kJsRequestBytes")
 set(JS_VAR_NAME_response.js "kJsResponseBytes")
 set(JS_VAR_NAME_fetch.js "kJsFetchBytes")
+set(JS_VAR_NAME_crypto.js "kJsCryptoBytes")
 
 set(OUTPUT_HEADER "${OUTPUT_DIR}/js_embedded.hpp")
 file(MAKE_DIRECTORY "${OUTPUT_DIR}")

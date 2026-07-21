@@ -36,10 +36,12 @@ constexpr EmbeddedJs kBootstrapJs[] = {
   {"js/whatwg-url-polyfill.js", kJsWhatwgUrlPolyfillBytes,
    sizeof(kJsWhatwgUrlPolyfillBytes)},
   {"js/body_polyfill.js", kJsBodyPolyfillBytes, sizeof(kJsBodyPolyfillBytes)},
+  {"js/buffer.js", kJsBufferBytes, sizeof(kJsBufferBytes)},
   {"js/headers.js", kJsHeadersBytes, sizeof(kJsHeadersBytes)},
   {"js/request.js", kJsRequestBytes, sizeof(kJsRequestBytes)},
   {"js/response.js", kJsResponseBytes, sizeof(kJsResponseBytes)},
   {"js/fetch.js", kJsFetchBytes, sizeof(kJsFetchBytes)},
+  {"js/crypto.js", kJsCryptoBytes, sizeof(kJsCryptoBytes)},
 };
 
 std::vector<uint8_t> js_prop_bytes(JSContext* ctx, JSValueConst obj, const char* name)
