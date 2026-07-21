@@ -15,7 +15,7 @@ Current implemented features:
 - `setTimeout`, `clearTimeout`, `setInterval`, `clearInterval`, `print`, `console.*` (in `src/host.cpp`).
 - `fetch` / `Request` / `Response` / `Headers` / `AbortController` (polyfills in `src/js/*.js`; C++ transport in `src/fetch.cpp`, `src/curl_http.hpp`, and `src/curl_runtime.cpp`).
 - `base64` / `base64.encode` / `base64.decode` (in `src/host.cpp`).
-- `Buffer` polyfill (in `src/js/buffer.js`).
+- `Buffer` polyfill (in `src/js/buffer.js`, bundled and minified from the npm `buffer` package).
 - `crypto` module: hash/hmac (`md5`, `sha1`, `sha256`, `sha512`, `createHash`, `createHmac`), AES-ECB/CBC/GCM, `randomBytes`, `randomUUID`, `timingSafeEqual`, `pbkdf2`/`pbkdf2Sync` (C++ in `src/crypto.cpp`; JS wrapper in `src/js/crypto.js`).
 - Per-request `curl_http::Client` created inside `fetch_api::async_fetch` and discarded after the request completes.
 - `data:` and `about:` scheme handling in JS.
