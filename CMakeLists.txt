@@ -13,6 +13,18 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
+# --- dependencies via vcpkg ---
+find_package(spdlog CONFIG REQUIRED)
+find_package(asio CONFIG REQUIRED)
+find_package(qjs CONFIG REQUIRED)
+find_package(OpenSSL REQUIRED)
+find_package(CURL REQUIRED)
+find_package(llhttp CONFIG REQUIRED)
+find_package(async_simple CONFIG REQUIRED)
+find_package(nlohmann_json CONFIG REQUIRED)
+find_package(reflectcpp CONFIG REQUIRED)
+find_package(Boost REQUIRED COMPONENTS uuid)
+
 # --- embedded JS polyfills: generate a header with byte arrays ---
 set(JS_EMBED_FILES
   "${CMAKE_SOURCE_DIR}/src/js/abort.js"
@@ -37,17 +49,6 @@ add_custom_command(
 )
 add_custom_target(js_embedded_header DEPENDS "${JS_EMBED_HEADER}")
 
-# --- dependencies via vcpkg ---
-find_package(spdlog CONFIG REQUIRED)
-find_package(asio CONFIG REQUIRED)
-find_package(qjs CONFIG REQUIRED)
-find_package(OpenSSL REQUIRED)
-find_package(CURL REQUIRED)
-find_package(async_simple CONFIG REQUIRED)
-find_package(nlohmann_json CONFIG REQUIRED)
-find_package(reflectcpp CONFIG REQUIRED)
-find_package(Boost REQUIRED COMPONENTS uuid)
-
 # --- core library (host + fetch layers) ---
 add_library(asio_qjs_core
   src/binary_store.cpp
@@ -68,6 +69,7 @@ target_link_libraries(asio_qjs_core PUBLIC
   asio::asio
   qjs
   CURL::libcurl
+  llhttp
   OpenSSL::SSL
   OpenSSL::Crypto
   spdlog::spdlog
@@ -138,6 +140,7 @@ if(ASIO_QJS_BUILD_TESTS)
   add_qjs_gtest(test_base64 tests/test_base64.cpp)
   add_qjs_gtest(test_binary_store tests/test_binary_store.cpp)
   add_qjs_gtest(test_crypto tests/test_crypto.cpp)
+  add_qjs_gtest(test_http tests/test_http.cpp)
 
   add_executable(test_wpt_fetch tests/test_wpt_fetch.cpp)
   target_link_libraries(test_wpt_fetch PRIVATE GTest::gtest_main asio_qjs_core)

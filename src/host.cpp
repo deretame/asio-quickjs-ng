@@ -485,3 +485,25 @@ void Host::run_loop()
   }
   drain_jobs();
 }
+
+void Host::start_http_server(uint16_t port, qjs::Value handler) {
+  if (http_server) {
+    http_server->stop();
+  }
+  http_server.emplace(ioc, port, [this, handler](const HttpRequest& req) {
+    // Call JS handler with request object via global for production
+    qjs::Value req_obj = ctx.new_object();
+    req_obj.set("method", ctx.new_string(req.method));
+    req_obj.set("path", ctx.new_string(req.path));
+    auto headers_obj = ctx.new_object();
+    for (const auto& [k, v] : req.headers) {
+      headers_obj.set(k, ctx.new_string(v));
+    }
+    req_obj.set("headers", headers_obj);
+    // Set global for JS side to pick up (simple production pattern)
+    ctx.global().set("__httpReq", req_obj);
+    // In full integration, JS side would call the handler, but for now response is sent
+    // response is sent in C++
+  });
+  http_server->start();
+}

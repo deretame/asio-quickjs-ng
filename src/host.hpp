@@ -8,25 +8,14 @@
 #include <boost/uuid/uuid.hpp>
 #include <boost/uuid/uuid_io.hpp>
 
-#include <chrono>
-#include <cstddef>
-#include <cstdint>
-#include <exception>
-#include <memory>
-#include <optional>
 #include <span>
 #include <string>
-#include <string_view>
 #include <unordered_map>
-#include <utility>
+#include <functional>
 
-#include "asio_executor.hpp"
-#include "function_registry.hpp"
+#include "net/http_server.hpp"
 #include "qjs.hpp"
-
-namespace curl_http {
-struct Transfer;
-}
+#include "function_registry.hpp"
 
 struct Host {
   asio::io_context ioc{1};
@@ -45,6 +34,9 @@ struct Host {
 
   // Per-instance ID. Default is a UUID v4 generated at construction.
   std::string host_id;
+
+  // HTTP server
+  std::optional<HttpServer> http_server;
 
   Host();
   explicit Host(std::string id);
@@ -78,7 +70,17 @@ struct Host {
   void register_function(const std::string& name, SyncFunction fn);
   void register_async_function(const std::string& name, AsyncFunction fn);
 
-  // Trampoline-style overloads: auto-convert JS args / return values.
+  // Global registration: functions registered here are visible to all Host
+  // instances, even if registered while a Host is already running.
+  static void register_global_function(
+    const std::string& name,
+    SyncFunction fn
+    );
+  static void register_global_async_function(
+    const std::string& name,
+    AsyncFunction fn
+    );
+
   template <typename Fn>
   requires(!std::same_as<std::decay_t<Fn>, SyncFunction>)
   void register_function(const std::string& name, Fn&& fn)
@@ -116,7 +118,7 @@ struct Host {
   static void register_global_async_function(
     const std::string& name,
     Fn&& fn
-)
+    )
   {
     FunctionRegistry::register_global_async_function(
       name,
@@ -212,6 +214,9 @@ struct Host {
     bool drain = true
     );
   bool eval_file(const char* path);
+
+  // HTTP server start
+  void start_http_server(uint16_t port, qjs::Value handler);
 
  private:
   static void spdlog_lazy_error(const char* msg);

@@ -9,6 +9,7 @@
     "quickjs-ng",
     "openssl",
     "curl",
+    "llhttp",
     "async-simple",
     "nlohmann-json",
     "reflectcpp",
