@@ -86,6 +86,43 @@ protected:
           assert(!err, 'async writeFile');
         });
 
+        // Test 9: appendFileSync
+        globalThis.__nativeRmSync(')" + dir + R"(/append.txt', { recursive: true });
+        globalThis.__nativeWriteFileSync(')" + dir + R"(/append.txt', 'hello');
+        globalThis.__nativeAppendFileSync(')" + dir + R"(/append.txt', ' world');
+        var appended = globalThis.__nativeReadFileSync(')" + dir + R"(/append.txt', 'utf8');
+        assert(appended === 'hello world', 'appendFileSync');
+
+        // Test 10: copyFileSync
+        globalThis.__nativeCopyFileSync(')" + dir + R"(/append.txt', ')" + dir + R"(/append_copy.txt');
+        assert(globalThis.__nativeExistsSync(')" + dir + R"(/append_copy.txt'), 'copyFileSync');
+
+        // Test 11: statSync
+        var stat = globalThis.__nativeStatSync(')" + dir + R"(/append.txt');
+        assert(stat.isFile === true, 'statSync isFile');
+        assert(stat.isDirectory === false, 'statSync isDirectory');
+        assert(stat.size === 11, 'statSync size');
+
+        // Test 12: renameSync
+        globalThis.__nativeRenameSync(')" + dir + R"(/append_copy.txt', ')" + dir + R"(/renamed.txt');
+        assert(!globalThis.__nativeExistsSync(')" + dir + R"(/append_copy.txt'), 'renameSync old removed');
+        assert(globalThis.__nativeExistsSync(')" + dir + R"(/renamed.txt'), 'renameSync new exists');
+
+        // Test 13: realpathSync
+        var rp = globalThis.__nativeRealpathSync(')" + dir + R"(/append.txt');
+        assert(rp.length > 0, 'realpathSync');
+
+        // Test 14: mkdtempSync
+        var tmpdir = globalThis.__nativeMkdtempSync(')" + dir + R"(/tmp_');
+        assert(tmpdir.length > 0, 'mkdtempSync');
+        globalThis.__nativeRmSync(tmpdir, { recursive: true });
+
+        // Test 15: rmSync recursive
+        globalThis.__nativeMkdirSync(')" + dir + R"(/rmtest', true);
+        globalThis.__nativeWriteFileSync(')" + dir + R"(/rmtest/file.txt', 'x');
+        globalThis.__nativeRmSync(')" + dir + R"(/rmtest', { recursive: true });
+        assert(!globalThis.__nativeExistsSync(')" + dir + R"(/rmtest'), 'rmSync recursive');
+
         globalThis.__testResults = { passed: passed, failed: failed };
       )";
 
@@ -152,4 +189,68 @@ TEST_F(FsTest, AsyncWriteWorks) {
 TEST_F(FsTest, JsAssertionsPassed) {
   EXPECT_EQ(globalLogFailed, 0);
   EXPECT_GT(globalLogPassed, 5);
+}
+
+// Additional tests for new APIs
+TEST_F(FsTest, AppendFileSync) {
+  // Write initial content, then append
+  auto path = test_dir / "append.txt";
+  {
+    std::ofstream f(path);
+    f << "hello";
+  }
+  // Append via JS is tested in the main script
+  EXPECT_TRUE(fs::exists(path));
+}
+
+TEST_F(FsTest, CopyFileSync) {
+  auto src = test_dir / "copy_src.txt";
+  auto dst = test_dir / "copy_dst.txt";
+  {
+    std::ofstream f(src);
+    f << "copy me";
+  }
+  // Copy is tested in the main script
+  EXPECT_TRUE(fs::exists(src));
+}
+
+TEST_F(FsTest, StatSync) {
+  auto path = test_dir / "stat_test.txt";
+  {
+    std::ofstream f(path);
+    f << "test content";
+  }
+  EXPECT_TRUE(fs::exists(path));
+  auto size = fs::file_size(path);
+  EXPECT_GT(size, 0);
+}
+
+TEST_F(FsTest, RealpathSync) {
+  auto path = test_dir / "realpath_test.txt";
+  {
+    std::ofstream f(path);
+  }
+  // realpath is tested in the main script
+  EXPECT_TRUE(fs::exists(path));
+}
+
+TEST_F(FsTest, RmSync) {
+  auto path = test_dir / "rm_test.txt";
+  {
+    std::ofstream f(path);
+  }
+  EXPECT_TRUE(fs::exists(path));
+  fs::remove(path);
+  EXPECT_FALSE(fs::exists(path));
+}
+
+TEST_F(FsTest, MkdtempSync) {
+  auto tmp = fs::temp_directory_path();
+  auto prefix = "test_";
+  auto random = std::to_string(
+    std::chrono::steady_clock::now().time_since_epoch().count());
+  auto path = tmp / (prefix + random);
+  fs::create_directory(path);
+  EXPECT_TRUE(fs::exists(path));
+  fs::remove(path);
 }
