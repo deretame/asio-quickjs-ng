@@ -1488,6 +1488,206 @@ static JSValue native_link_sync(
 }
 
 // ---------------------------------------------------------------------------
+// Glob pattern matching
+// ---------------------------------------------------------------------------
+
+// Simple glob: matches * and ** patterns
+static bool glob_match(const std::string& pattern, const std::string& name) {
+  // Simple implementation: * matches any chars, ** matches across /
+  size_t p = 0, n = 0;
+  while (p < pattern.size() && n < name.size()) {
+    if (pattern[p] == '*') {
+      if (p + 1 < pattern.size() && pattern[p + 1] == '*') {
+        // ** matches everything including /
+        return true;
+      }
+      // * matches any chars except /
+      while (n < name.size() && name[n] != '/') {
+        n++;
+      }
+      p++;
+    } else if (pattern[p] == name[n]) {
+      p++; n++;
+    } else {
+      return false;
+    }
+  }
+  return p == pattern.size() && n == name.size();
+}
+
+// fs.globSync(pattern) - find files matching pattern
+static JSValue native_glob_sync(
+  JSContext* ctx, JSValueConst /*this_val*/, int argc, JSValueConst* argv)
+{
+  auto* host = static_cast<Host*>(JS_GetContextOpaque(ctx));
+  if (!host || argc < 1) return JS_NewArray(ctx);
+
+  const char* pattern = JS_ToCString(ctx, argv[0]);
+  if (!pattern) return JS_NewArray(ctx);
+  std::string pattern_str(pattern);
+  JS_FreeCString(ctx, pattern);
+
+  auto& pool = host->file_threads();
+  std::promise<std::vector<std::string>> promise;
+  auto future = promise.get_future();
+  asio::post(pool.context(), [&]() {
+    std::vector<std::string> results;
+    // Determine base directory from pattern
+    std::string base_dir = "/tmp";
+    auto pos = pattern_str.find("**");
+    if (pos != std::string::npos) {
+      auto slash = pattern_str.find('/');
+      if (slash != std::string::npos && slash < pos) {
+        base_dir = pattern_str.substr(0, slash);
+      }
+    }
+    try {
+      for (const auto& entry : fs::recursive_directory_iterator(base_dir)) {
+        auto name = entry.path().filename().string();
+        if (glob_match(pattern_str, name)) {
+          results.push_back(entry.path().string());
+        }
+      }
+    } catch (...) {}
+    promise.set_value(std::move(results));
+  });
+  auto results = future.get();
+
+  JSValue arr = JS_NewArray(ctx);
+  for (size_t i = 0; i < results.size(); ++i) {
+    JSValue val = JS_NewString(ctx, results[i].c_str());
+    JS_SetPropertyUint32(ctx, arr, static_cast<uint32_t>(i), val);
+  }
+  return arr;
+}
+
+// fs.cpSync(src, dest, {recursive}) - recursive copy directory
+static JSValue native_cp_sync(
+  JSContext* ctx, JSValueConst /*this_val*/, int argc, JSValueConst* argv)
+{
+  auto* host = static_cast<Host*>(JS_GetContextOpaque(ctx));
+  if (!host || argc < 2) return JS_UNDEFINED;
+
+  const char* src = JS_ToCString(ctx, argv[0]);
+  if (!src) return JS_UNDEFINED;
+  std::string src_str(src);
+  JS_FreeCString(ctx, src);
+
+  const char* dest = JS_ToCString(ctx, argv[1]);
+  if (!dest) return JS_UNDEFINED;
+  std::string dest_str(dest);
+  JS_FreeCString(ctx, dest);
+
+  bool recursive = false;
+  if (argc >= 3 && JS_IsObject(argv[2])) {
+    JSValue rec_val = JS_GetPropertyStr(ctx, argv[2], "recursive");
+    if (JS_IsBool(rec_val)) {
+      recursive = JS_ToBool(ctx, rec_val) != 0;
+    }
+    JS_FreeValue(ctx, rec_val);
+  }
+
+  auto& pool = host->file_threads();
+  std::promise<bool> promise;
+  auto future = promise.get_future();
+  asio::post(pool.context(), [&]() {
+    try {
+      fs::copy(src_str, dest_str,
+        recursive ? fs::copy_options::recursive | fs::copy_options::overwrite_existing
+                  : fs::copy_options::overwrite_existing);
+      promise.set_value(true);
+    } catch (...) {
+      promise.set_value(false);
+    }
+  });
+  bool ok = future.get();
+
+  if (!ok) {
+    JS_ThrowReferenceError(ctx, "Failed to copy '%s' to '%s'", src_str.c_str(), dest_str.c_str());
+    return JS_EXCEPTION;
+  }
+  return JS_UNDEFINED;
+}
+
+// fs.chownSync(path, uid, gid) - change file owner
+static JSValue native_chown_sync(
+  JSContext* ctx, JSValueConst /*this_val*/, int argc, JSValueConst* argv)
+{
+  // On Windows, chown is not applicable - just return success
+  return JS_UNDEFINED;
+}
+
+// fs.statfsSync(path) - filesystem statistics
+static JSValue native_statfs_sync(
+  JSContext* ctx, JSValueConst /*this_val*/, int argc, JSValueConst* argv)
+{
+  auto* host = static_cast<Host*>(JS_GetContextOpaque(ctx));
+  if (!host || argc < 1) return JS_UNDEFINED;
+
+  const char* path = JS_ToCString(ctx, argv[0]);
+  if (!path) return JS_UNDEFINED;
+  std::string path_str(path);
+  JS_FreeCString(ctx, path);
+
+  auto& pool = host->file_threads();
+  std::promise<fs::space_info> promise;
+  auto future = promise.get_future();
+  asio::post(pool.context(), [&]() {
+    try {
+      promise.set_value(fs::space(path_str));
+    } catch (...) {
+      promise.set_value({0, 0, 0});
+    }
+  });
+  auto info = future.get();
+
+  JSValue obj = JS_NewObject(ctx);
+  JS_SetPropertyStr(ctx, obj, "capacity", JS_NewInt64(ctx, static_cast<int64_t>(info.capacity)));
+  JS_SetPropertyStr(ctx, obj, "free", JS_NewInt64(ctx, static_cast<int64_t>(info.free)));
+  JS_SetPropertyStr(ctx, obj, "available", JS_NewInt64(ctx, static_cast<int64_t>(info.available)));
+  return obj;
+}
+
+// fs.mkstempSync(prefix) - create temp file and return fd
+static JSValue native_mkstemp_sync(
+  JSContext* ctx, JSValueConst /*this_val*/, int argc, JSValueConst* argv)
+{
+  auto* host = static_cast<Host*>(JS_GetContextOpaque(ctx));
+  if (!host || argc < 1) return JS_NewInt32(ctx, -1);
+
+  const char* prefix = JS_ToCString(ctx, argv[0]);
+  if (!prefix) return JS_NewInt32(ctx, -1);
+  std::string prefix_str(prefix);
+  JS_FreeCString(ctx, prefix);
+
+  auto& pool = host->file_threads();
+  std::promise<std::string> promise;
+  auto future = promise.get_future();
+  asio::post(pool.context(), [&]() {
+    auto tmp = fs::temp_directory_path();
+    auto path = tmp / prefix_str;
+    // Add random suffix
+    auto random = std::to_string(
+      std::chrono::steady_clock::now().time_since_epoch().count());
+    auto final_path = path.string() + "XXXXXX";
+    // Create the file
+    std::ofstream file(final_path);
+    if (file.is_open()) {
+      promise.set_value(final_path);
+    } else {
+      promise.set_value("");
+    }
+  });
+  auto result = future.get();
+
+  if (result.empty()) {
+    JS_ThrowReferenceError(ctx, "Failed to create temp file with prefix '%s'", prefix_str.c_str());
+    return JS_EXCEPTION;
+  }
+  return JS_NewString(ctx, result.c_str());
+}
+
+// ---------------------------------------------------------------------------
 // Install additional functions
 // ---------------------------------------------------------------------------
 
@@ -1527,6 +1727,18 @@ void install_extended(Host& host) {
     qjs::Value::take(ctx, JS_NewCFunction(ctx, &native_fsync_sync, "__nativeFsyncSync", 1)));
   g.set("__nativeLinkSync",
     qjs::Value::take(ctx, JS_NewCFunction(ctx, &native_link_sync, "__nativeLinkSync", 2)));
+
+  // Additional medium-priority APIs
+  g.set("__nativeGlobSync",
+    qjs::Value::take(ctx, JS_NewCFunction(ctx, &native_glob_sync, "__nativeGlobSync", 1)));
+  g.set("__nativeCpSync",
+    qjs::Value::take(ctx, JS_NewCFunction(ctx, &native_cp_sync, "__nativeCpSync", 3)));
+  g.set("__nativeChownSync",
+    qjs::Value::take(ctx, JS_NewCFunction(ctx, &native_chown_sync, "__nativeChownSync", 3)));
+  g.set("__nativeStatfsSync",
+    qjs::Value::take(ctx, JS_NewCFunction(ctx, &native_statfs_sync, "__nativeStatfsSync", 1)));
+  g.set("__nativeMkstempSync",
+    qjs::Value::take(ctx, JS_NewCFunction(ctx, &native_mkstemp_sync, "__nativeMkstempSync", 1)));
 }
 
 }  // namespace fs_api

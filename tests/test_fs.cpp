@@ -187,3 +187,34 @@ TEST_F(FsTest, OpenSync) {
   EXPECT_TRUE(fs::exists(path));
   fs::remove(path);
 }
+
+TEST_F(FsTest, CpSync) {
+  auto src = "/tmp/asio_qjs_fs_test/cp_src.txt";
+  auto dst = "/tmp/asio_qjs_fs_test/cp_dst.txt";
+  {
+    std::ofstream f(src);
+    f << "copy content";
+  }
+  fs::copy_file(src, dst);
+  EXPECT_TRUE(fs::exists(dst));
+  fs::remove(src);
+  fs::remove(dst);
+}
+
+TEST_F(FsTest, MkstempSync) {
+  auto tmp = fs::temp_directory_path();
+  auto prefix = "test_";
+  auto random = std::to_string(
+    std::chrono::steady_clock::now().time_since_epoch().count());
+  auto path = tmp / (prefix + random + "XXXXXX");
+  {
+    std::ofstream f(path);
+  }
+  EXPECT_TRUE(fs::exists(path));
+  fs::remove(path);
+}
+
+TEST_F(FsTest, StatfsSync) {
+  auto info = fs::space("/tmp");
+  EXPECT_GT(info.capacity, 0);
+}

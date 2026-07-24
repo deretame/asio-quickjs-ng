@@ -14,7 +14,8 @@ void install(Host& host);
 
 // Install extended APIs: lstatSync, symlinkSync, readlinkSync, accessSync,
 //                        truncateSync, utimesSync, createReadStream,
-//                        createWriteStream, watch
+//                        createWriteStream, watch, openSync, closeSync,
+//                        readSync, writeSync, fsyncSync, linkSync
 void install_extended(Host& host);
 
 }  // namespace fs_api
