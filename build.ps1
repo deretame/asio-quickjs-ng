@@ -30,8 +30,12 @@ cmake -S . -B build -G Ninja `
   -DVCPKG_INSTALLED_DIR="$vcpkgInstalled"
 if ($LASTEXITCODE -ne 0) { throw "cmake configure failed" }
 
-cmake --build build -j
-if ($LASTEXITCODE -ne 0) { throw "cmake build failed" }
+cmake --build build -j 2>&1 | Tee-Object -Variable buildOutput
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "`n=== BUILD ERRORS ===" -ForegroundColor Red
+    $buildOutput | Select-String "error" | ForEach-Object { Write-Host $_ -ForegroundColor Yellow }
+    throw "cmake build failed"
+}
 
 Copy-Item -Force build\compile_commands.json compile_commands.json
 

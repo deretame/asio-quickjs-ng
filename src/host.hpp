@@ -20,12 +20,9 @@
 #include "curl_http.hpp"
 
 // Forward declarations for streaming functions (defined in host.cpp)
-JSValue native_stream(
-  JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
-JSValue native_stream_write(
-  JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
-JSValue native_stream_end(
-  JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+qjs::Value native_stream(Host* host, qjs::Value callback, std::optional<std::string> content_type);
+void native_stream_write(HttpSession* session, std::vector<uint8_t> data);
+void native_stream_end(HttpSession* session);
 
 struct Host {
   asio::io_context ioc{1};
@@ -172,6 +169,7 @@ struct Host {
 
   [[noreturn]] void throw_type_error(const char* msg);
   [[noreturn]] void throw_internal_error(const char* msg);
+  [[noreturn]] void throw_reference_error(const char* fmt, ...);
 
   template <typename LazyT>
   void spawn_lazy(LazyT&& lazy)
@@ -267,16 +265,12 @@ struct Host {
 
   friend JSValue native_http_response(
     JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
-  friend JSValue native_create_server(
-    JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
-  friend JSValue native_close_server(
-    JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
-  friend JSValue native_stream(
-    JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
-  friend JSValue native_stream_write(
-    JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
-  friend JSValue native_stream_end(
-    JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+  friend void native_http_response(Host* host, qjs::Value data, int32_t conn_id);
+  friend void native_create_server(Host* host, int32_t port);
+  friend void native_close_server(Host* host);
+  friend qjs::Value native_stream(Host* host, qjs::Value callback, std::optional<std::string> content_type);
+  friend void native_stream_write(HttpSession* session, std::vector<uint8_t> data);
+  friend void native_stream_end(HttpSession* session);
 
   void send_js_response(uint64_t conn_id, qjs::Value response);
 

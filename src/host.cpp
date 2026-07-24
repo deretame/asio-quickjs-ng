@@ -272,74 +272,31 @@ std::vector<uint8_t> base64_decode_fn(Host* host, std::string input)
   return base64_decode_string(input);
 }
 
-JSValue native_http_response(
-  JSContext* ctx,
-  JSValueConst /*this_val*/,
-  int argc,
-  JSValueConst* argv)
-{
-  auto* host = static_cast<Host*>(JS_GetContextOpaque(ctx));
-  if (!host || argc < 2) {
-    return JS_UNDEFINED;
-  }
-  int32_t conn_id = 0;
-  if (JS_ToInt32(ctx, &conn_id, argv[1]) != 0) {
-    return JS_UNDEFINED;
-  }
-  qjs::Value data(ctx, JS_DupValue(ctx, argv[0]));
+void native_http_response(Host* host, qjs::Value data, int32_t conn_id) {
   host->send_http_response_native(std::move(data), conn_id);
-  return JS_UNDEFINED;
 }
 
-JSValue native_close_server(
-  JSContext* ctx,
-  JSValueConst /*this_val*/,
-  int /*argc*/,
-  JSValueConst* /*argv*/)
-{
-  auto* host = static_cast<Host*>(JS_GetContextOpaque(ctx));
-  if (!host) {
-    return JS_UNDEFINED;
-  }
+void native_close_server(Host* host) {
   if (host->http_server) {
     host->http_server->stop();
     host->http_server.reset();
     host->http_active = false;
     spdlog::info("HTTP server stopped");
   }
-  return JS_UNDEFINED;
 }
 
-JSValue native_create_server(
-  JSContext* ctx,
-  JSValueConst /*this_val*/,
-  int argc,
-  JSValueConst* argv)
-{
-  auto* host = static_cast<Host*>(JS_GetContextOpaque(ctx));
-  if (!host || argc < 1) {
-    return JS_UNDEFINED;
-  }
-  int32_t port = 0;
-  if (JS_ToInt32(ctx, &port, argv[0]) != 0) {
-    return JS_UNDEFINED;
-  }
-  // Retrieve the handler from JS global
-  qjs::Value handler_get =
-    host->global().get("__httpHandler").get("get");
+void native_create_server(Host* host, int32_t port) {
+  qjs::Value handler_get = host->global().get("__httpHandler").get("get");
   if (!handler_get.is_function()) {
     spdlog::error("__httpHandler.get is not a function");
-    return JS_UNDEFINED;
+    return;
   }
   qjs::Value handler = handler_get.call();
   if (!handler.is_function()) {
     spdlog::error("no HTTP handler registered in JS");
-    return JS_UNDEFINED;
+    return;
   }
-  host->start_http_server(
-    static_cast<uint16_t>(port),
-    qjs::Value::dup(ctx, handler.raw()));
-  return JS_UNDEFINED;
+  host->start_http_server(static_cast<uint16_t>(port), std::move(handler));
 }
 
 }  // namespace
@@ -468,6 +425,15 @@ void Host::throw_internal_error(const char* msg)
   throw std::runtime_error(msg);
 }
 
+void Host::throw_reference_error(const char* fmt, ...)
+{
+  va_list args;
+  va_start(args, fmt);
+  JS_ThrowReferenceError(ctx.get(), fmt, args);
+  va_end(args);
+  throw std::runtime_error("reference error");
+}
+
 async_simple::coro::Lazy<void> Host::async_sleep(std::chrono::milliseconds ms)
 {
   async_simple::Promise<void> p;
@@ -509,31 +475,11 @@ bool Host::install_runtime()
       c.fn<&console_error_fn>("error");
     });
   g.set("__hostID", ctx.new_string(host_id));
-  g.set(
-    "call",
-    qjs::Value::take(
-    ctx.get(),
-    JS_NewCFunction(ctx.get(), &native_call, "call", 1)));
-  g.set(
-    "__nativeSendHttpResponse",
-    qjs::Value::take(
-    ctx.get(),
-    JS_NewCFunction(ctx.get(), &native_http_response, "__nativeSendHttpResponse", 2)));
-  g.set(
-    "__nativeCreateServer",
-    qjs::Value::take(
-    ctx.get(),
-    JS_NewCFunction(ctx.get(), &native_create_server, "__nativeCreateServer", 1)));
-  g.set(
-    "__nativeCloseServer",
-    qjs::Value::take(
-    ctx.get(),
-    JS_NewCFunction(ctx.get(), &native_close_server, "__nativeCloseServer", 0)));
-  g.set(
-    "stream",
-    qjs::Value::take(
-    ctx.get(),
-    JS_NewCFunction(ctx.get(), &native_stream, "stream", 2)));
+  g.fn<&native_call>("call");
+  g.fn<&native_http_response>("__nativeSendHttpResponse");
+  g.fn<&native_create_server>("__nativeCreateServer");
+  g.fn<&native_close_server>("__nativeCloseServer");
+  g.fn<&native_stream>("stream");
 
   // Register __extractResponse helper for converting Response to plain object
   {
@@ -935,197 +881,63 @@ void Host::send_http_response_native(qjs::Value data, int32_t conn_id) {
 
 // Native write_chunk function: called from JS writer.write(data)
 // Synchronously writes a chunk to the socket.
-JSValue native_stream_write(
-  JSContext* ctx,
-  JSValueConst /*this_val*/,
-  int argc,
-  JSValueConst* argv)
-{
-  auto* session = static_cast<HttpSession*>(
-    JS_GetContextOpaque(ctx));
-  if (!session || argc < 1) {
-    return JS_UNDEFINED;
-  }
-
-  // Convert argument to bytes and write synchronously
-  if (JS_IsString(argv[0])) {
-    size_t len = 0;
-    const char* str = JS_ToCStringLen(ctx, &len, argv[0]);
-    if (str) {
-      session->write_chunk_sync(std::span<const uint8_t>(
-        reinterpret_cast<const uint8_t*>(str), len));
-      JS_FreeCString(ctx, str);
-    }
-  } else {
-    // Try ArrayBuffer / Uint8Array
-    size_t byte_offset = 0;
-    size_t byte_length = 0;
-    JSValue ab = JS_GetTypedArrayBuffer(
-      ctx, argv[0], &byte_offset, &byte_length, nullptr);
-    if (!JS_IsException(ab)) {
-      size_t ab_size = 0;
-      uint8_t* buf = JS_GetArrayBuffer(ctx, &ab_size, ab);
-      if (buf && byte_length > 0) {
-        std::vector<uint8_t> data_copy(
-          buf + byte_offset,
-          buf + byte_offset + std::min(byte_length, ab_size - byte_offset));
-        session->write_chunk_sync(std::span<const uint8_t>(data_copy));
-      }
-      JS_FreeValue(ctx, ab);
-    }
-  }
-
-  return JS_UNDEFINED;
+void native_stream_write(HttpSession* session, std::vector<uint8_t> data) {
+  session->write_chunk_sync(std::span<const uint8_t>(data));
 }
 
 // Native end_stream function: called from JS writer.end()
-JSValue native_stream_end(
-  JSContext* ctx,
-  JSValueConst /*this_val*/,
-  int /*argc*/,
-  JSValueConst* /*argv*/)
-{
-  auto* session = static_cast<HttpSession*>(
-    JS_GetContextOpaque(ctx));
-  if (!session) {
-    return JS_UNDEFINED;
-  }
+void native_stream_end(HttpSession* session) {
   session->finish_chunked(true);
-  return JS_UNDEFINED;
 }
+
+
 
 // Main stream function: begins chunked encoding, creates a writer,
 // and calls the user callback.
 // JS: globalThis.stream(async (write, end) => { ... }, { contentType: '...' })
-JSValue native_stream(
-  JSContext* ctx,
-  JSValueConst /*this_val*/,
-  int argc,
-  JSValueConst* argv)
-{
-  auto* host = static_cast<Host*>(JS_GetContextOpaque(ctx));
-  if (!host || argc < 1) {
-    spdlog::error("native_stream: no host or argc < 1");
-    return JS_NewInt32(ctx, -1);
-  }
+qjs::Value native_stream(Host* host, qjs::Value callback, std::optional<std::string> content_type) {
+  JSContext* ctx = host->js_raw();
 
   // Get session pointer from global
-  JSValue session_val = JS_GetPropertyStr(
-    ctx, JS_GetGlobalObject(ctx), "__httpSessionPtr");
+  JSValue session_val = JS_GetPropertyStr(ctx, JS_GetGlobalObject(ctx), "__httpSessionPtr");
   int64_t session_ptr = 0;
   JS_ToInt64(ctx, &session_ptr, session_val);
   JS_FreeValue(ctx, session_val);
-
   HttpSession* session = reinterpret_cast<HttpSession*>(session_ptr);
   if (!session) {
-    spdlog::error("native_stream: session_ptr=0");
-    return JS_NewInt32(ctx, -1);
-  }
-  if (!JS_IsFunction(ctx, argv[0])) {
-    spdlog::error("native_stream: argv[0] is not a function");
-    return JS_NewInt32(ctx, -1);
-  }
-
-  // Get content type from options (default: text/plain)
-  std::string content_type = "text/plain";
-  if (argc >= 2 && JS_IsObject(argv[1])) {
-    JSValue ct_val = JS_GetPropertyStr(ctx, argv[1], "contentType");
-    if (JS_IsString(ct_val)) {
-      const char* ct_str = JS_ToCString(ctx, ct_val);
-      if (ct_str) {
-        content_type = ct_str;
-        JS_FreeCString(ctx, ct_str);
-      }
-    }
-    JS_FreeValue(ctx, ct_val);
+    spdlog::error("native_stream: no session");
+    return qjs::Value::take(ctx, JS_NewInt32(ctx, -1));
   }
 
   // Begin chunked transfer encoding
-  session->begin_chunked(200, content_type);
+  session->begin_chunked(200, content_type.value_or("text/plain"));
 
   // Temporarily set session as context opaque for write_chunk/end
   JS_SetContextOpaque(ctx, session);
 
   // Create write and end functions
-  JSValue write_fn = JS_NewCFunction(
-    ctx, &native_stream_write, "write", 1);
-  JSValue end_fn = JS_NewCFunction(
-    ctx, &native_stream_end, "end", 0);
+  qjs::Value write_fn = qjs::Ctx{ctx}.func<&native_stream_write>("write");
+  qjs::Value end_fn = qjs::Ctx{ctx}.func<&native_stream_end>("end");
 
   // Call the callback with write and end functions
-  JSValue args[2] = { write_fn, end_fn };
-  spdlog::debug("calling stream callback");
-  JSValue result = JS_Call(
-    ctx, argv[0], JS_UNDEFINED, 2, args);
-  spdlog::debug("stream callback returned, is_exception={}",
-    JS_IsException(result));
-
-  // Drain microtasks to ensure await works
-  JSRuntime* rt_ptr = JS_GetRuntime(ctx);
-  if (JS_IsJobPending(rt_ptr)) {
-    JSContext* job_ctx = nullptr;
-    while (JS_IsJobPending(rt_ptr)) {
-      JS_ExecutePendingJob(rt_ptr, &job_ctx);
-    }
-  }
+  qjs::Value result = callback.call(write_fn, end_fn);
 
   // Restore the host as context opaque
   JS_SetContextOpaque(ctx, host);
 
-  if (JS_IsException(result)) {
-    JS_FreeValue(ctx, result);
-    return JS_NewInt32(ctx, -1);
+  if (result.is_exception()) {
+    return qjs::Value::take(ctx, JS_NewInt32(ctx, -1));
   }
 
-  // If the callback returned a Promise, wrap it so that when it resolves,
-  // the response handler knows the stream was already handled.
-  JSValue then_fn = JS_GetPropertyStr(ctx, result, "then");
-  if (JS_IsFunction(ctx, then_fn)) {
-    // Create a new promise that resolves to { __streamHandled: true }
-    // when the original promise resolves.
-    JSValue global = JS_GetGlobalObject(ctx);
-    JSValue promise_ctor = JS_GetPropertyStr(ctx, global, "Promise");
-    JSValue resolver = JS_NewObject(ctx);
-
-    // Store the original promise for later
-    JS_SetPropertyStr(ctx, resolver, "_orig", JS_DupValue(ctx, result));
-
-    JSValue promise_resolver = JS_NewCFunction(
-      ctx,
-      [](JSContext* ctx, JSValueConst this_val, int argc,
-         JSValueConst* argv) -> JSValue {
-        // Return { __streamHandled: true }
-        JSValue obj = JS_NewObject(ctx);
-        JSValue true_val = JS_NewBool(ctx, 1);
-        JS_SetPropertyStr(ctx, obj, "__streamHandled", true_val);
-        return obj;
-      },
-      "resolve_stream", 1);
-
-    JSValue args[1] = { promise_resolver };
-    JSValue new_promise = JS_CallConstructor(
-      ctx, promise_resolver, 0, nullptr);
-
-    // Actually, simpler approach: just return the original promise
-    // but attach a .then that replaces the result
-    JS_FreeValue(ctx, new_promise);
-    JS_FreeValue(ctx, promise_resolver);
-    JS_FreeValue(ctx, promise_ctor);
-    JS_FreeValue(ctx, global);
-    JS_FreeValue(ctx, then_fn);
-
-    // Return a promise that resolves to the sentinel
-    const char* wrapper_code =
-      "(async () => { await __orig; return { __streamHandled: true }; })()";
-    JS_SetPropertyStr(ctx, JS_GetGlobalObject(ctx),
-      "__orig", JS_DupValue(ctx, result));
-    JSValue wrapped = JS_Eval(ctx, wrapper_code,
-      strlen(wrapper_code), "<stream-wrapper>",
-      JS_EVAL_TYPE_GLOBAL);
+  // If the callback returned a Promise, wrap it
+  qjs::Value then_fn = result.get("then");
+  if (then_fn.is_function()) {
+    qjs::Value global = qjs::Value::take(ctx, JS_GetGlobalObject(ctx));
+    global.set("_orig", result);
+    const char* wrapper = "(async () => { await _orig; return { __streamHandled: true }; })()";
+    qjs::Value wrapped = qjs::Value::take(ctx, JS_Eval(ctx, wrapper, strlen(wrapper), "<stream-wrapper>", JS_EVAL_TYPE_GLOBAL));
     return wrapped;
   }
 
-  JS_FreeValue(ctx, then_fn);
-  JS_FreeValue(ctx, result);
-  return JS_NewInt32(ctx, 0);
+  return qjs::Value::take(ctx, JS_NewInt32(ctx, 0));
 }

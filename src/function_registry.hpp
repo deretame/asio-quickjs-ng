@@ -321,9 +321,4 @@ struct FunctionRegistry {
 
 // JS native: call(name, ...args)
 // Sync functions return their value directly. Async functions return a Promise.
-JSValue native_call(
-  JSContext* ctx,
-  JSValueConst this_val,
-  int argc,
-  JSValueConst* argv
-  );
+JSValue native_call(Host* host, std::string name, qjs::Args args);

@@ -131,60 +131,43 @@ std::optional<AsyncFunction> FunctionRegistry::find_async_function(
   return std::nullopt;
 }
 
-JSValue native_call(
-  JSContext* ctx,
-  JSValueConst /*this_val*/,
-  int argc,
-  JSValueConst* argv
-)
+JSValue native_call(Host* host, std::string name, qjs::Args args)
 {
-  if (argc < 1) {
-    return JS_ThrowTypeError(ctx, "call(name, ...args)");
-  }
-
-  const char* name = JS_ToCString(ctx, argv[0]);
-  if (!name) {
-    return JS_EXCEPTION;
-  }
-  std::string name_str(name);
-  JS_FreeCString(ctx, name);
-
-  Host* host = static_cast<Host*>(JS_GetContextOpaque(ctx));
   if (!host) {
-    return JS_ThrowInternalError(ctx, "call: host is null");
+    return JS_ThrowInternalError(nullptr, "call: host is null");
   }
 
-  auto sync_fn = host->registry.find_sync_function(name_str);
+  auto sync_fn = host->registry.find_sync_function(name);
   if (sync_fn) {
     std::vector<qjs::Value> owned_args;
-    owned_args.reserve(static_cast<size_t>(argc - 1));
-    for (int i = 1; i < argc; ++i) {
-      owned_args.push_back(qjs::Value::dup(ctx, argv[i]));
+    owned_args.reserve(static_cast<size_t>(args.size()));
+    for (int i = 0; i < args.size(); ++i) {
+      owned_args.push_back(args[i]);
     }
     try {
-      qjs::Value result = (*sync_fn)(qjs::Ctx{ctx}, host, owned_args);
+      qjs::Value result = (*sync_fn)(qjs::Ctx{host->js_raw()}, host, owned_args);
       return result.release();
     } catch (const qjs::detail::ConvertError&) {
       return JS_EXCEPTION;
     } catch (const std::exception& e) {
-      return JS_Throw(ctx, make_error(ctx, e.what()).release());
+      return JS_Throw(host->js_raw(), make_error(host->js_raw(), e.what()).release());
     }
   }
 
-  auto async_fn = host->registry.find_async_function(name_str);
+  auto async_fn = host->registry.find_async_function(name);
   if (async_fn) {
     std::vector<qjs::Value> owned_args;
-    owned_args.reserve(static_cast<size_t>(argc - 1));
-    for (int i = 1; i < argc; ++i) {
-      owned_args.push_back(qjs::Value::dup(ctx, argv[i]));
+    owned_args.reserve(static_cast<size_t>(args.size()));
+    for (int i = 0; i < args.size(); ++i) {
+      owned_args.push_back(args[i]);
     }
 
-    auto cap = qjs::PromiseCapability::create(ctx);
+    auto cap = qjs::PromiseCapability::create(host->js_raw());
     if (!cap) {
       return JS_EXCEPTION;
     }
 
-    auto lazy = (*async_fn)(qjs::Ctx{ctx}, host, owned_args);
+    auto lazy = (*async_fn)(qjs::Ctx{host->js_raw()}, host, owned_args);
     ++host->pending_ops;
     host->spawn_lazy(
       handle_async_call(
@@ -195,7 +178,7 @@ JSValue native_call(
   }
 
   return JS_ThrowTypeError(
-    ctx,
+    host->js_raw(),
     "call: function not registered: %s",
-    name_str.c_str());
+    name.c_str());
 }

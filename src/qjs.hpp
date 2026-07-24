@@ -191,6 +191,11 @@ class Value {
     return ctx_ && JS_ToInt32(ctx_, &out, v_) == 0;
   }
 
+  bool to_bool() const
+  {
+    return ctx_ && JS_ToBool(ctx_, v_) != 0;
+  }
+
   // Zero-copy binary helpers: read bytes from ArrayBuffer or Uint8Array.
   bool is_array_buffer() const { return ctx_ && JS_IsArrayBuffer(v_); }
 
@@ -250,12 +255,6 @@ class Value {
   // g.fn<&native_fn>("name") — name once (creates + sets C function).
   template <auto Fn>
   void fn(const char* name);
-
-  // g.fn_raw(&native_fn, "name", argc) — for raw JSCFunction* signatures.
-  void fn_raw(JSCFunction* fn, const char* name, int length)
-  {
-    set(name, take(ctx_, JS_NewCFunction(ctx_, fn, name, length)));
-  }
 
   // g.obj("console", [](Value &o) { o.fn<&print_fn>("log"); });
   template <typename F>
