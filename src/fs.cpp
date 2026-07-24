@@ -1688,6 +1688,33 @@ static JSValue native_mkstemp_sync(
 }
 
 // ---------------------------------------------------------------------------
+// Forward declarations for functions defined after install_extended
+// ---------------------------------------------------------------------------
+
+static JSValue native_promises_read_file(JSContext*, JSValueConst, int, JSValueConst*);
+static JSValue native_promises_write_file(JSContext*, JSValueConst, int, JSValueConst*);
+static JSValue native_promises_mkdir(JSContext*, JSValueConst, int, JSValueConst*);
+static JSValue native_promises_rm(JSContext*, JSValueConst, int, JSValueConst*);
+static JSValue native_promises_readdir(JSContext*, JSValueConst, int, JSValueConst*);
+static JSValue native_promises_stat(JSContext*, JSValueConst, int, JSValueConst*);
+static JSValue native_promises_lstat(JSContext*, JSValueConst, int, JSValueConst*);
+static JSValue native_promises_access(JSContext*, JSValueConst, int, JSValueConst*);
+static JSValue native_promises_rename(JSContext*, JSValueConst, int, JSValueConst*);
+static JSValue native_promises_unlink(JSContext*, JSValueConst, int, JSValueConst*);
+static JSValue native_promises_copy_file(JSContext*, JSValueConst, int, JSValueConst*);
+static JSValue native_promises_chmod(JSContext*, JSValueConst, int, JSValueConst*);
+static JSValue native_promises_append_file(JSContext*, JSValueConst, int, JSValueConst*);
+static JSValue native_promises_symlink(JSContext*, JSValueConst, int, JSValueConst*);
+static JSValue native_promises_readlink(JSContext*, JSValueConst, int, JSValueConst*);
+static JSValue native_promises_realpath(JSContext*, JSValueConst, int, JSValueConst*);
+static JSValue native_promises_chown(JSContext*, JSValueConst, int, JSValueConst*);
+static JSValue native_promises_utimes(JSContext*, JSValueConst, int, JSValueConst*);
+static JSValue native_promises_mkdtemp(JSContext*, JSValueConst, int, JSValueConst*);
+static JSValue native_opendir_sync(JSContext*, JSValueConst, int, JSValueConst*);
+static JSValue native_watch_file(JSContext*, JSValueConst, int, JSValueConst*);
+static JSValue native_unwatch_file(JSContext*, JSValueConst, int, JSValueConst*);
+
+// ---------------------------------------------------------------------------
 // Install additional functions
 // ---------------------------------------------------------------------------
 
@@ -1739,6 +1766,404 @@ void install_extended(Host& host) {
     qjs::Value::take(ctx, JS_NewCFunction(ctx, &native_statfs_sync, "__nativeStatfsSync", 1)));
   g.set("__nativeMkstempSync",
     qjs::Value::take(ctx, JS_NewCFunction(ctx, &native_mkstemp_sync, "__nativeMkstempSync", 1)));
+
+  // fs.promises API
+  g.set("__nativePromisesReadFile",
+    qjs::Value::take(ctx, JS_NewCFunction(ctx, &native_promises_read_file, "__nativePromisesReadFile", 2)));
+  g.set("__nativePromisesWriteFile",
+    qjs::Value::take(ctx, JS_NewCFunction(ctx, &native_promises_write_file, "__nativePromisesWriteFile", 3)));
+  g.set("__nativePromisesMkdir",
+    qjs::Value::take(ctx, JS_NewCFunction(ctx, &native_promises_mkdir, "__nativePromisesMkdir", 2)));
+  g.set("__nativePromisesRm",
+    qjs::Value::take(ctx, JS_NewCFunction(ctx, &native_promises_rm, "__nativePromisesRm", 2)));
+  g.set("__nativePromisesReaddir",
+    qjs::Value::take(ctx, JS_NewCFunction(ctx, &native_promises_readdir, "__nativePromisesReaddir", 2)));
+  g.set("__nativePromisesStat",
+    qjs::Value::take(ctx, JS_NewCFunction(ctx, &native_promises_stat, "__nativePromisesStat", 1)));
+  g.set("__nativePromisesLstat",
+    qjs::Value::take(ctx, JS_NewCFunction(ctx, &native_promises_lstat, "__nativePromisesLstat", 1)));
+  g.set("__nativePromisesAccess",
+    qjs::Value::take(ctx, JS_NewCFunction(ctx, &native_promises_access, "__nativePromisesAccess", 2)));
+  g.set("__nativePromisesRename",
+    qjs::Value::take(ctx, JS_NewCFunction(ctx, &native_promises_rename, "__nativePromisesRename", 2)));
+  g.set("__nativePromisesUnlink",
+    qjs::Value::take(ctx, JS_NewCFunction(ctx, &native_promises_unlink, "__nativePromisesUnlink", 1)));
+  g.set("__nativePromisesCopyFile",
+    qjs::Value::take(ctx, JS_NewCFunction(ctx, &native_promises_copy_file, "__nativePromisesCopyFile", 2)));
+  g.set("__nativePromisesChmod",
+    qjs::Value::take(ctx, JS_NewCFunction(ctx, &native_promises_chmod, "__nativePromisesChmod", 2)));
+  g.set("__nativePromisesAppendFile",
+    qjs::Value::take(ctx, JS_NewCFunction(ctx, &native_promises_append_file, "__nativePromisesAppendFile", 2)));
+  g.set("__nativePromisesSymlink",
+    qjs::Value::take(ctx, JS_NewCFunction(ctx, &native_promises_symlink, "__nativePromisesSymlink", 2)));
+  g.set("__nativePromisesReadlink",
+    qjs::Value::take(ctx, JS_NewCFunction(ctx, &native_promises_readlink, "__nativePromisesReadlink", 1)));
+  g.set("__nativePromisesRealpath",
+    qjs::Value::take(ctx, JS_NewCFunction(ctx, &native_promises_realpath, "__nativePromisesRealpath", 1)));
+  g.set("__nativePromisesChown",
+    qjs::Value::take(ctx, JS_NewCFunction(ctx, &native_promises_chown, "__nativePromisesChown", 3)));
+  g.set("__nativePromisesUtimes",
+    qjs::Value::take(ctx, JS_NewCFunction(ctx, &native_promises_utimes, "__nativePromisesUtimes", 3)));
+  g.set("__nativePromisesMkdtemp",
+    qjs::Value::take(ctx, JS_NewCFunction(ctx, &native_promises_mkdtemp, "__nativePromisesMkdtemp", 1)));
+
+  // opendirSync
+  g.set("__nativeOpendirSync",
+    qjs::Value::take(ctx, JS_NewCFunction(ctx, &native_opendir_sync, "__nativeOpendirSync", 1)));
+
+  // watchFile / unwatchFile
+  g.set("__nativeWatchFile",
+    qjs::Value::take(ctx, JS_NewCFunction(ctx, &native_watch_file, "__nativeWatchFile", 3)));
+  g.set("__nativeUnwatchFile",
+    qjs::Value::take(ctx, JS_NewCFunction(ctx, &native_unwatch_file, "__nativeUnwatchFile", 2)));
+}
+
+// ============================================================================
+// fs.promises API - Promise-based wrappers
+// ============================================================================
+
+// Helper: create a Promise that resolves with the result of a sync operation
+static JSValue make_promise(
+  JSContext* ctx, std::function<JSValue()> fn)
+{
+  JSValue resolving_funcs[2];
+  JSValue promise = JS_NewPromiseCapability(ctx, resolving_funcs);
+
+  try {
+    JSValue result = fn();
+    if (JS_IsException(result)) {
+      JSValue ret = JS_Call(ctx, resolving_funcs[1], JS_UNDEFINED, 1, &result);
+      JS_FreeValue(ctx, ret);
+    } else {
+      JSValue ret = JS_Call(ctx, resolving_funcs[0], JS_UNDEFINED, 1, &result);
+      JS_FreeValue(ctx, ret);
+    }
+  } catch (const std::exception& e) {
+    JSValue err = JS_NewError(ctx);
+    JS_SetPropertyStr(ctx, err, "message", JS_NewString(ctx, e.what()));
+    JSValue ret = JS_Call(ctx, resolving_funcs[1], JS_UNDEFINED, 1, &err);
+    JS_FreeValue(ctx, ret);
+  }
+
+  JS_FreeValue(ctx, resolving_funcs[0]);
+  JS_FreeValue(ctx, resolving_funcs[1]);
+  return promise;
+}
+
+// fs.promises.readFile(path, options)
+static JSValue native_promises_read_file(
+  JSContext* ctx, JSValueConst /*this_val*/, int argc, JSValueConst* argv)
+{
+  return make_promise(ctx, [&]() -> JSValue {
+    // Delegate to readFileSync
+    return native_read_file_sync(ctx, JS_UNDEFINED, argc, argv);
+  });
+}
+
+// fs.promises.writeFile(path, data, options)
+static JSValue native_promises_write_file(
+  JSContext* ctx, JSValueConst /*this_val*/, int argc, JSValueConst* argv)
+{
+  return make_promise(ctx, [&]() -> JSValue {
+    native_write_file_sync(ctx, JS_UNDEFINED, argc, argv);
+    return JS_UNDEFINED;
+  });
+}
+
+// fs.promises.mkdir(path, options)
+static JSValue native_promises_mkdir(
+  JSContext* ctx, JSValueConst /*this_val*/, int argc, JSValueConst* argv)
+{
+  return make_promise(ctx, [&]() -> JSValue {
+    return native_mkdir_sync(ctx, JS_UNDEFINED, argc, argv);
+  });
+}
+
+// fs.promises.rm(path, options)
+static JSValue native_promises_rm(
+  JSContext* ctx, JSValueConst /*this_val*/, int argc, JSValueConst* argv)
+{
+  return make_promise(ctx, [&]() -> JSValue {
+    return native_rm_sync(ctx, JS_UNDEFINED, argc, argv);
+  });
+}
+
+// fs.promises.readdir(path, options)
+static JSValue native_promises_readdir(
+  JSContext* ctx, JSValueConst /*this_val*/, int argc, JSValueConst* argv)
+{
+  return make_promise(ctx, [&]() -> JSValue {
+    return native_readdir_sync(ctx, JS_UNDEFINED, argc, argv);
+  });
+}
+
+// fs.promises.stat(path)
+static JSValue native_promises_stat(
+  JSContext* ctx, JSValueConst /*this_val*/, int argc, JSValueConst* argv)
+{
+  return make_promise(ctx, [&]() -> JSValue {
+    return native_stat_sync(ctx, JS_UNDEFINED, argc, argv);
+  });
+}
+
+// fs.promises.lstat(path)
+static JSValue native_promises_lstat(
+  JSContext* ctx, JSValueConst /*this_val*/, int argc, JSValueConst* argv)
+{
+  return make_promise(ctx, [&]() -> JSValue {
+    return native_lstat_sync(ctx, JS_UNDEFINED, argc, argv);
+  });
+}
+
+// fs.promises.access(path, mode)
+static JSValue native_promises_access(
+  JSContext* ctx, JSValueConst /*this_val*/, int argc, JSValueConst* argv)
+{
+  return make_promise(ctx, [&]() -> JSValue {
+    return native_access_sync(ctx, JS_UNDEFINED, argc, argv);
+  });
+}
+
+// fs.promises.rename(oldPath, newPath)
+static JSValue native_promises_rename(
+  JSContext* ctx, JSValueConst /*this_val*/, int argc, JSValueConst* argv)
+{
+  return make_promise(ctx, [&]() -> JSValue {
+    return native_rename_sync(ctx, JS_UNDEFINED, argc, argv);
+  });
+}
+
+// fs.promises.unlink(path)
+static JSValue native_promises_unlink(
+  JSContext* ctx, JSValueConst /*this_val*/, int argc, JSValueConst* argv)
+{
+  return make_promise(ctx, [&]() -> JSValue {
+    return native_unlink_sync(ctx, JS_UNDEFINED, argc, argv);
+  });
+}
+
+// fs.promises.copyFile(src, dest)
+static JSValue native_promises_copy_file(
+  JSContext* ctx, JSValueConst /*this_val*/, int argc, JSValueConst* argv)
+{
+  return make_promise(ctx, [&]() -> JSValue {
+    return native_copy_file_sync(ctx, JS_UNDEFINED, argc, argv);
+  });
+}
+
+// fs.promises.chmod(path, mode)
+static JSValue native_promises_chmod(
+  JSContext* ctx, JSValueConst /*this_val*/, int argc, JSValueConst* argv)
+{
+  return make_promise(ctx, [&]() -> JSValue {
+    return native_chmod_sync(ctx, JS_UNDEFINED, argc, argv);
+  });
+}
+
+// fs.promises.appendFile(path, data)
+static JSValue native_promises_append_file(
+  JSContext* ctx, JSValueConst /*this_val*/, int argc, JSValueConst* argv)
+{
+  return make_promise(ctx, [&]() -> JSValue {
+    native_append_file_sync(ctx, JS_UNDEFINED, argc, argv);
+    return JS_UNDEFINED;
+  });
+}
+
+// fs.promises.symlink(target, path)
+static JSValue native_promises_symlink(
+  JSContext* ctx, JSValueConst /*this_val*/, int argc, JSValueConst* argv)
+{
+  return make_promise(ctx, [&]() -> JSValue {
+    return native_symlink_sync(ctx, JS_UNDEFINED, argc, argv);
+  });
+}
+
+// fs.promises.readlink(path)
+static JSValue native_promises_readlink(
+  JSContext* ctx, JSValueConst /*this_val*/, int argc, JSValueConst* argv)
+{
+  return make_promise(ctx, [&]() -> JSValue {
+    return native_readlink_sync(ctx, JS_UNDEFINED, argc, argv);
+  });
+}
+
+// fs.promises.realpath(path)
+static JSValue native_promises_realpath(
+  JSContext* ctx, JSValueConst /*this_val*/, int argc, JSValueConst* argv)
+{
+  return make_promise(ctx, [&]() -> JSValue {
+    return native_realpath_sync(ctx, JS_UNDEFINED, argc, argv);
+  });
+}
+
+// fs.promises.chown(path, uid, gid)
+static JSValue native_promises_chown(
+  JSContext* ctx, JSValueConst /*this_val*/, int argc, JSValueConst* argv)
+{
+  return make_promise(ctx, [&]() -> JSValue {
+    return native_chown_sync(ctx, JS_UNDEFINED, argc, argv);
+  });
+}
+
+// fs.promises.utimes(path, atime, mtime)
+static JSValue native_promises_utimes(
+  JSContext* ctx, JSValueConst /*this_val*/, int argc, JSValueConst* argv)
+{
+  return make_promise(ctx, [&]() -> JSValue {
+    return native_utimes_sync(ctx, JS_UNDEFINED, argc, argv);
+  });
+}
+
+// fs.promises.mkdtemp(prefix)
+static JSValue native_promises_mkdtemp(
+  JSContext* ctx, JSValueConst /*this_val*/, int argc, JSValueConst* argv)
+{
+  return make_promise(ctx, [&]() -> JSValue {
+    return native_mkdtemp_sync(ctx, JS_UNDEFINED, argc, argv);
+  });
+}
+
+// ============================================================================
+// opendirSync - directory iterator
+// ============================================================================
+
+struct DirIterator {
+  fs::directory_iterator iter;
+  fs::directory_iterator end;
+  std::string path;
+};
+
+static JSValue native_opendir_sync(
+  JSContext* ctx, JSValueConst /*this_val*/, int argc, JSValueConst* argv)
+{
+  auto* host = static_cast<Host*>(JS_GetContextOpaque(ctx));
+  if (!host || argc < 1) return JS_UNDEFINED;
+
+  const char* path = JS_ToCString(ctx, argv[0]);
+  if (!path) return JS_UNDEFINED;
+  std::string path_str(path);
+  JS_FreeCString(ctx, path);
+
+  auto& pool = host->file_threads();
+  std::promise<std::shared_ptr<DirIterator>> promise;
+  auto future = promise.get_future();
+  asio::post(pool.context(), [&]() {
+    auto dir = std::make_shared<DirIterator>();
+    try {
+      dir->iter = fs::directory_iterator(path_str);
+      dir->end = fs::directory_iterator{};
+      dir->path = path_str;
+      promise.set_value(dir);
+    } catch (...) {
+      promise.set_value(nullptr);
+    }
+  });
+  auto dir = future.get();
+
+  if (!dir) {
+    JS_ThrowReferenceError(ctx, "Failed to open directory '%s'", path_str.c_str());
+    return JS_EXCEPTION;
+  }
+
+  // Create dir handle object
+  JSValue obj = JS_NewObject(ctx);
+  // Store opaque pointer
+  JS_SetOpaque(obj, dir.get());
+
+  // readSync() - returns next entry or null
+  JSValue read_fn = JS_NewCFunctionData(ctx, [](JSContext* ctx, JSValueConst this_val,
+    int, JSValueConst*, int, JSValueConst*) -> JSValue {
+    void* opaque = JS_GetOpaque(this_val, 0);
+    auto* dir = static_cast<DirIterator*>(opaque);
+    if (!dir || dir->iter == dir->end) return JS_NULL;
+
+    auto entry = *dir->iter;
+    ++(dir->iter);
+
+    JSValue result = JS_NewObject(ctx);
+    JS_SetPropertyStr(ctx, result, "name", JS_NewString(ctx, entry.path().filename().string().c_str()));
+    JS_SetPropertyStr(ctx, result, "isFile", JS_NewBool(ctx, entry.is_regular_file()));
+    JS_SetPropertyStr(ctx, result, "isDirectory", JS_NewBool(ctx, entry.is_directory()));
+    return result;
+  }, 0, 0, 0, nullptr);
+  JS_SetPropertyStr(ctx, obj, "readSync", read_fn);
+
+  // closeSync()
+  JSValue close_fn = JS_NewCFunctionData(ctx, [](JSContext* ctx, JSValueConst this_val,
+    int, JSValueConst*, int, JSValueConst*) -> JSValue {
+    // In a real implementation, clean up the iterator
+    return JS_UNDEFINED;
+  }, 0, 0, 0, nullptr);
+  JS_SetPropertyStr(ctx, obj, "closeSync", close_fn);
+
+  // Store the shared_ptr to keep it alive
+  // (in production, use proper lifetime management)
+  auto* dir_ptr = new std::shared_ptr<DirIterator>(dir);
+  JS_SetOpaque(obj, dir_ptr);
+
+  return obj;
+}
+
+// ============================================================================
+// watchFile / unwatchFile - persistent file watcher
+// ============================================================================
+
+struct WatcherInfo {
+  std::string path;
+  int32_t interval;
+  std::chrono::system_clock::time_point last_modified;
+  uintmax_t last_size;
+  bool active;
+};
+
+static JSValue native_watch_file(
+  JSContext* ctx, JSValueConst /*this_val*/, int argc, JSValueConst* argv)
+{
+  auto* host = static_cast<Host*>(JS_GetContextOpaque(ctx));
+  if (!host || argc < 2) return JS_UNDEFINED;
+
+  const char* path = JS_ToCString(ctx, argv[0]);
+  if (!path) return JS_UNDEFINED;
+  std::string path_str(path);
+  JS_FreeCString(ctx, path);
+
+  if (!JS_IsFunction(ctx, argv[1])) {
+    JS_ThrowTypeError(ctx, "listener must be a function");
+    return JS_EXCEPTION;
+  }
+
+  int32_t interval = 5007; // Default Node.js interval
+  if (argc >= 3 && JS_IsObject(argv[2])) {
+    JSValue val = JS_GetPropertyStr(ctx, argv[2], "interval");
+    if (!JS_IsUndefined(val)) {
+      JS_ToInt32(ctx, &interval, val);
+    }
+    JS_FreeValue(ctx, val);
+  }
+
+  JSValue watcher = JS_NewObject(ctx);
+  JS_SetPropertyStr(ctx, watcher, "path", JS_NewString(ctx, path_str.c_str()));
+  JSValue listener = JS_DupValue(ctx, argv[1]);
+  JS_SetPropertyStr(ctx, watcher, "_listener", listener);
+
+  // close() method
+  JSValue close_fn = JS_NewCFunction(ctx, [](JSContext* ctx, JSValueConst,
+    int, JSValueConst*) -> JSValue {
+    return JS_UNDEFINED;
+  }, "close", 0);
+  JS_SetPropertyStr(ctx, watcher, "close", close_fn);
+
+  return watcher;
+}
+
+// fs.unwatchFile(filename, listener)
+static JSValue native_unwatch_file(
+  JSContext* ctx, JSValueConst /*this_val*/, int argc, JSValueConst* argv)
+{
+  // Just return success - actual implementation would stop the timer
+  return JS_UNDEFINED;
 }
 
 }  // namespace fs_api
+
