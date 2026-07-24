@@ -35,6 +35,38 @@ struct Host {
   int pending_ops = 0;
   bool stopping = false;
 
+  // Thread pool for file I/O (default 4 threads).
+  // File operations run here to avoid blocking the main event loop.
+  struct ThreadPool {
+    asio::io_context ioc;
+    asio::executor_work_guard<asio::io_context::executor_type> guard{
+      asio::make_work_guard(ioc)};
+    std::vector<std::jthread> threads;
+
+    explicit ThreadPool(size_t num_threads = 4) {
+      for (size_t i = 0; i < num_threads; ++i) {
+        threads.emplace_back([this] { ioc.run(); });
+      }
+    }
+
+    ~ThreadPool() {
+      guard.reset();
+      ioc.stop();
+    }
+
+    asio::io_context& context() { return ioc; }
+  };
+
+  std::unique_ptr<ThreadPool> file_pool;
+
+  // Access to the file thread pool (creates if needed).
+  ThreadPool& file_threads() {
+    if (!file_pool) {
+      file_pool = std::make_unique<ThreadPool>(4);
+    }
+    return *file_pool;
+  }
+
   // In-flight fetch transfers (id -> Transfer*), for AbortSignal cancellation.
   uint64_t next_fetch_id = 1;
   std::unordered_map<uint64_t, curl_http::Transfer*> fetch_transfers;

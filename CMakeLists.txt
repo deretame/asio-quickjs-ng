@@ -72,6 +72,7 @@ add_library(asio_qjs_core
   src/function_registry.cpp
   src/qjs_module.cpp
   src/net/http_server.cpp
+  src/fs.cpp
 )
 target_include_directories(asio_qjs_core PUBLIC "${CMAKE_SOURCE_DIR}/src" PRIVATE "${JS_EMBED_HEADER_DIR}")
 target_compile_definitions(asio_qjs_core PUBLIC
@@ -155,6 +156,7 @@ if(ASIO_QJS_BUILD_TESTS)
   add_qjs_gtest(test_binary_store tests/test_binary_store.cpp)
   add_qjs_gtest(test_crypto tests/test_crypto.cpp)
   add_qjs_gtest(test_http tests/test_http.cpp)
+  add_qjs_gtest(test_fs tests/test_fs.cpp)
 
   add_executable(test_wpt_fetch tests/test_wpt_fetch.cpp)
   target_link_libraries(test_wpt_fetch PRIVATE GTest::gtest_main asio_qjs_core)

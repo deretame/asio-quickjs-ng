@@ -1,6 +1,7 @@
 #include "host.hpp"
 
 #include "binary_store.hpp"
+#include "fs.hpp"
 
 #include <spdlog/spdlog.h>
 
@@ -573,6 +574,7 @@ bool Host::install_runtime()
   if (!binary_store::install(*this)) {
     return false;
   }
+  fs_api::install(*this);
 
   constexpr EmbeddedJs k_core_bootstrap_js[] = {
     {"js/abort.js", kJsAbortBytes, sizeof(kJsAbortBytes)},
