@@ -48,143 +48,53 @@ static bool write_file_sync(
 }
 
 // ---------------------------------------------------------------------------
-// Native function implementations
+// Native function implementations (typed signatures)
 // ---------------------------------------------------------------------------
 
 // fs.readFileSync(path, [encoding]) -> string | Uint8Array
-static JSValue native_read_file_sync(
-  JSContext* ctx, JSValueConst /*this_val*/, int argc, JSValueConst* argv)
+qjs::Value native_read_file_sync(
+  Host* host,
+  std::string path,
+  std::optional<std::string> encoding)
 {
-  auto* host = static_cast<Host*>(JS_GetContextOpaque(ctx));
-  if (!host || argc < 1) {
-    return JS_UNDEFINED;
-  }
-
-  const char* path = JS_ToCString(ctx, argv[0]);
-  if (!path) {
-    return JS_UNDEFINED;
-  }
-  std::string path_str(path);
-  JS_FreeCString(ctx, path);
-
-  // Check for encoding parameter (default: null = return Uint8Array)
-  const char* encoding = nullptr;
-  if (argc >= 2 && JS_IsString(argv[1])) {
-    encoding = JS_ToCString(ctx, argv[1]);
-  }
-
-  // Read file on the thread pool
   auto& pool = host->file_threads();
-  std::vector<uint8_t> data;
-
-  // Use asio::post to run on the file thread pool, then block for result
   std::promise<std::vector<uint8_t>> promise;
   auto future = promise.get_future();
   asio::post(pool.context(), [&]() {
-    auto result = read_file_sync(path_str);
-    promise.set_value(std::move(result));
+    promise.set_value(read_file_sync(path));
   });
-  data = future.get();
-
-  if (encoding) {
-    JS_FreeCString(ctx, encoding);
-  }
+  auto data = future.get();
 
   if (data.empty()) {
-    JS_ThrowReferenceError(ctx, "ENOENT: no such file '%s'", path_str.c_str());
-    return JS_EXCEPTION;
+    host->throw_reference_error("ENOENT: no such file '%s'", path.c_str());
   }
 
-  if (encoding && (std::string_view(encoding) == "utf8" ||
-                   std::string_view(encoding) == "utf-8")) {
-    // Return as JS string
-    std::string str(reinterpret_cast<const char*>(data.data()), data.size());
-    return JS_NewString(ctx, str.c_str());
+  if (encoding && (*encoding == "utf8" || *encoding == "utf-8")) {
+    return qjs::Value::take(host->js_raw(),
+      JS_NewStringLen(host->js_raw(),
+        reinterpret_cast<const char*>(data.data()), data.size()));
   }
 
-  // Return as Uint8Array (not ArrayBuffer)
-  JSValue arrayBuffer = JS_NewArrayBufferCopy(ctx, data.data(), data.size());
-  // Wrap in Uint8Array
-  JSValue global = JS_GetGlobalObject(ctx);
-  JSValue uint8Ctor = JS_GetPropertyStr(ctx, global, "Uint8Array");
-  JSValue args[1] = {arrayBuffer};
-  JSValue result = JS_CallConstructor(ctx, uint8Ctor, 1, args);
-  JS_FreeValue(ctx, uint8Ctor);
-  JS_FreeValue(ctx, global);
-  // arrayBuffer is consumed by the constructor call
-  return result;
+  return qjs::Value::new_uint8_array_copy(host->js_raw(), data.data(), data.size());
 }
 
 // fs.writeFileSync(path, data)
-static JSValue native_write_file_sync(
-  JSContext* ctx, JSValueConst /*this_val*/, int argc, JSValueConst* argv)
+void native_write_file_sync(
+  Host* host,
+  std::string path,
+  std::vector<uint8_t> data)
 {
-  auto* host = static_cast<Host*>(JS_GetContextOpaque(ctx));
-  if (!host || argc < 2) {
-    return JS_UNDEFINED;
-  }
-
-  const char* path = JS_ToCString(ctx, argv[0]);
-  if (!path) {
-    return JS_UNDEFINED;
-  }
-  std::string path_str(path);
-  JS_FreeCString(ctx, path);
-
-  // Get data as bytes
-  const uint8_t* data_ptr = nullptr;
-  size_t data_len = 0;
-  std::vector<uint8_t> data_copy;
-
-  if (JS_IsString(argv[1])) {
-    const char* str = JS_ToCStringLen(ctx, &data_len, argv[1]);
-    if (str) {
-      data_ptr = reinterpret_cast<const uint8_t*>(str);
-      // Need to copy since we'll use it async
-      data_copy.assign(data_ptr, data_ptr + data_len);
-      JS_FreeCString(ctx, str);
-      data_ptr = data_copy.data();
-    }
-  } else {
-    // Try ArrayBuffer / TypedArray
-    size_t offset = 0;
-    size_t length = 0;
-    JSValue ab = JS_GetTypedArrayBuffer(ctx, argv[1], &offset, &length, nullptr);
-    if (!JS_IsException(ab)) {
-      size_t ab_size = 0;
-      uint8_t* buf = JS_GetArrayBuffer(ctx, &ab_size, ab);
-      if (buf && length > 0) {
-        data_copy.assign(buf + offset, buf + offset + std::min(length, ab_size - offset));
-        data_ptr = data_copy.data();
-        data_len = data_copy.size();
-      }
-      JS_FreeValue(ctx, ab);
-    }
-  }
-
-  if (!data_ptr || data_len == 0) {
-    return JS_UNDEFINED;
-  }
-
-  // Copy data for the thread pool
-  std::vector<uint8_t> data(data_ptr, data_ptr + data_len);
-
-  // Write file on the thread pool
   auto& pool = host->file_threads();
   std::promise<bool> promise;
   auto future = promise.get_future();
-  asio::post(pool.context(), [path = std::move(path_str), d = std::move(data), &promise]() {
-    bool ok = write_file_sync(path, d.data(), d.size());
-    promise.set_value(ok);
+  asio::post(pool.context(), [&]() {
+    promise.set_value(write_file_sync(path, data.data(), data.size()));
   });
   bool ok = future.get();
 
   if (!ok) {
-    JS_ThrowReferenceError(ctx, "Failed to write file '%s'", path_str.c_str());
-    return JS_EXCEPTION;
+    host->throw_reference_error("Failed to write file '%s'", path.c_str());
   }
-
-  return JS_UNDEFINED;
 }
 
 // fs.readFileSync async version (callback-based)
@@ -350,110 +260,55 @@ static JSValue native_write_file(
 }
 
 // fs.existsSync(path) -> boolean
-static JSValue native_exists_sync(
-  JSContext* ctx, JSValueConst /*this_val*/, int argc, JSValueConst* argv)
-{
-  if (argc < 1) return JS_NewBool(ctx, false);
-
-  const char* path = JS_ToCString(ctx, argv[0]);
-  if (!path) return JS_NewBool(ctx, false);
-  bool exists = fs::exists(path);
-  JS_FreeCString(ctx, path);
-  return JS_NewBool(ctx, exists);
+bool native_exists_sync(Host* host, std::string path) {
+  return fs::exists(path);
 }
 
 // fs.unlinkSync(path)
-static JSValue native_unlink_sync(
-  JSContext* ctx, JSValueConst /*this_val*/, int argc, JSValueConst* argv)
-{
-  auto* host = static_cast<Host*>(JS_GetContextOpaque(ctx));
-  if (!host || argc < 1) return JS_UNDEFINED;
-
-  const char* path = JS_ToCString(ctx, argv[0]);
-  if (!path) return JS_UNDEFINED;
-  std::string path_str(path);
-  JS_FreeCString(ctx, path);
-
+void native_unlink_sync(Host* host, std::string path) {
   auto& pool = host->file_threads();
   std::promise<bool> promise;
   auto future = promise.get_future();
   asio::post(pool.context(), [&]() {
-    bool ok = fs::remove(path_str);
-    promise.set_value(ok);
+    promise.set_value(fs::remove(path));
   });
-  bool ok = future.get();
-
-  if (!ok) {
-    JS_ThrowReferenceError(ctx, "Failed to unlink '%s'", path_str.c_str());
-    return JS_EXCEPTION;
-  }
-  return JS_UNDEFINED;
+  future.get();
 }
 
 // fs.mkdirSync(path, [recursive])
-static JSValue native_mkdir_sync(
-  JSContext* ctx, JSValueConst /*this_val*/, int argc, JSValueConst* argv)
-{
-  auto* host = static_cast<Host*>(JS_GetContextOpaque(ctx));
-  if (!host || argc < 1) return JS_UNDEFINED;
-
-  const char* path = JS_ToCString(ctx, argv[0]);
-  if (!path) return JS_UNDEFINED;
-  std::string path_str(path);
-  JS_FreeCString(ctx, path);
-
-  bool recursive = false;
-  if (argc >= 2 && JS_IsBool(argv[1])) {
-    recursive = JS_ToBool(ctx, argv[1]) != 0;
-  }
-
+void native_mkdir_sync(Host* host, std::string path, bool recursive = false) {
   auto& pool = host->file_threads();
   std::promise<bool> promise;
   auto future = promise.get_future();
   asio::post(pool.context(), [&]() {
-    bool ok = recursive ? fs::create_directories(path_str)
-                        : fs::create_directory(path_str);
-    promise.set_value(ok);
+    promise.set_value(recursive ? fs::create_directories(path)
+                                : fs::create_directory(path));
   });
-  bool ok = future.get();
-
-  if (!ok) {
-    JS_ThrowReferenceError(ctx, "Failed to mkdir '%s'", path_str.c_str());
-    return JS_EXCEPTION;
+  if (!future.get()) {
+    host->throw_reference_error("Failed to mkdir '%s'", path.c_str());
   }
-  return JS_UNDEFINED;
 }
 
 // fs.readdirSync(path) -> string[]
-static JSValue native_readdir_sync(
-  JSContext* ctx, JSValueConst /*this_val*/, int argc, JSValueConst* argv)
-{
-  auto* host = static_cast<Host*>(JS_GetContextOpaque(ctx));
-  if (!host || argc < 1) return JS_UNDEFINED;
-
-  const char* path = JS_ToCString(ctx, argv[0]);
-  if (!path) return JS_UNDEFINED;
-  std::string path_str(path);
-  JS_FreeCString(ctx, path);
-
+qjs::Value native_readdir_sync(Host* host, std::string path) {
   auto& pool = host->file_threads();
   std::promise<std::vector<std::string>> promise;
   auto future = promise.get_future();
   asio::post(pool.context(), [&]() {
     std::vector<std::string> entries;
-    for (const auto& entry : fs::directory_iterator(path_str)) {
+    for (const auto& entry : fs::directory_iterator(path)) {
       entries.push_back(entry.path().filename().string());
     }
     promise.set_value(std::move(entries));
   });
   auto entries = future.get();
 
-  JSValue arr = JS_NewArray(ctx);
+  JSValue arr = JS_NewArray(host->js_raw());
   for (size_t i = 0; i < entries.size(); ++i) {
-    JSValue val = JS_NewString(ctx, entries[i].c_str());
-    JS_SetPropertyUint32(ctx, arr, static_cast<uint32_t>(i), val);
+    JSValue val = JS_NewString(host->js_raw(), entries[i].c_str());
+    JS_SetPropertyUint32(host->js_raw(), arr, static_cast<uint32_t>(i), val);
   }
-  return arr;
+  return qjs::Value::take(host->js_raw(), arr);
 }
 
 // fs.appendFileSync(path, data)

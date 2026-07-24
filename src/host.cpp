@@ -575,6 +575,7 @@ bool Host::install_runtime()
     return false;
   }
   fs_api::install(*this);
+  fs_api::install_extended(*this);
 
   constexpr EmbeddedJs k_core_bootstrap_js[] = {
     {"js/abort.js", kJsAbortBytes, sizeof(kJsAbortBytes)},
