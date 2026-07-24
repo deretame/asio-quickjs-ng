@@ -37,6 +37,7 @@ set(JS_EMBED_FILES
   "${CMAKE_SOURCE_DIR}/src/js/response.js"
   "${CMAKE_SOURCE_DIR}/src/js/fetch.js"
   "${CMAKE_SOURCE_DIR}/src/js/crypto.js"
+  "${CMAKE_SOURCE_DIR}/src/js/http.js"
 )
 set(JS_EMBED_HEADER_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
 set(JS_EMBED_HEADER "${JS_EMBED_HEADER_DIR}/js_embedded.hpp")
@@ -49,6 +50,17 @@ add_custom_command(
 )
 add_custom_target(js_embedded_header DEPENDS "${JS_EMBED_HEADER}")
 
+# --- embedded Hono framework ---
+set(HONO_EMBED_HEADER_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
+set(HONO_EMBED_HEADER "${HONO_EMBED_HEADER_DIR}/hono_embedded.hpp")
+add_custom_command(
+  OUTPUT "${HONO_EMBED_HEADER}"
+  COMMAND ${CMAKE_COMMAND} -DOUTPUT_DIR="${HONO_EMBED_HEADER_DIR}" -P "${CMAKE_SOURCE_DIR}/cmake/embed_hono.cmake"
+  DEPENDS "${CMAKE_SOURCE_DIR}/src/js/hono.bundle.js"
+  COMMENT "Generating hono_embedded.hpp"
+)
+add_custom_target(hono_embedded_header DEPENDS "${HONO_EMBED_HEADER}")
+
 # --- core library (host + fetch layers) ---
 add_library(asio_qjs_core
   src/binary_store.cpp
@@ -58,6 +70,8 @@ add_library(asio_qjs_core
   src/host_manager.cpp
   src/fetch.cpp
   src/function_registry.cpp
+  src/qjs_module.cpp
+  src/net/http_server.cpp
 )
 target_include_directories(asio_qjs_core PUBLIC "${CMAKE_SOURCE_DIR}/src" PRIVATE "${JS_EMBED_HEADER_DIR}")
 target_compile_definitions(asio_qjs_core PUBLIC
@@ -69,7 +83,7 @@ target_link_libraries(asio_qjs_core PUBLIC
   asio::asio
   qjs
   CURL::libcurl
-  llhttp
+  llhttp::llhttp_static
   OpenSSL::SSL
   OpenSSL::Crypto
   spdlog::spdlog
@@ -94,7 +108,7 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
 elseif(CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
   target_compile_options(asio_qjs_core PRIVATE /W3 /permissive-)
 endif()
-add_dependencies(asio_qjs_core js_embedded_header)
+add_dependencies(asio_qjs_core js_embedded_header hono_embedded_header)
 
 add_executable(asio_qjs src/main.cpp)
 target_link_libraries(asio_qjs PRIVATE asio_qjs_core)

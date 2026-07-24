@@ -4,6 +4,7 @@
 
 #include <concepts>
 #include <cstring>
+#include <mutex>
 #include <optional>
 #include <span>
 #include <stdexcept>
@@ -12,8 +13,10 @@
 #include <tuple>
 #include <type_traits>
 #include <limits>
+#include <unordered_map>
 #include <utility>
 #include <vector>
+#include <memory>
 
 extern "C" {
 #include "quickjs.h"
@@ -764,7 +767,14 @@ void Value::fn(const char* name)
 // ---------------------------------------------------------------------------
 class Runtime {
  public:
-  Runtime() : rt_(JS_NewRuntime()) {}
+  Runtime()
+    : rt_(JS_NewRuntime())
+  {
+    if (rt_) {
+      JS_SetModuleLoaderFunc(
+        rt_, nullptr, &Runtime::module_loader, nullptr);
+    }
+  }
 
   ~Runtime()
   {
@@ -791,10 +801,32 @@ class Runtime {
   }
 
   explicit operator bool() const {
-    return rt_ != nullptr;
+    return rt_;
   }
   JSRuntime* get() const { return rt_; }
 
+  // Register an in-memory module. `name` is the import specifier (e.g. "hono").
+  // `source` is the JavaScript source code for the module.
+  static void register_module(const char* name, const char* source, size_t len);
+
+  static void register_module(const char* name, std::string_view source)
+  {
+    register_module(name, source.data(), source.size());
+  }
+
+ private:
+  static JSModuleDef* module_loader(
+    JSContext* ctx, const char* module_name, void* opaque);
+
+  struct ModuleEntry {
+    std::unique_ptr<char[]> data;
+    size_t len;
+  };
+
+  static std::mutex s_module_mutex;
+  static std::unordered_map<std::string, ModuleEntry> s_modules;
+
+ public:
   bool job_pending() const { return JS_IsJobPending(rt_); }
 
   bool drain_jobs()

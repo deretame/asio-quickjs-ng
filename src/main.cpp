@@ -36,7 +36,7 @@ int main(int argc, char** argv)
 
   spdlog::info("curl {}", curl_version());
   spdlog::info("loading {}", script);
-  if (!host.eval_file(script)) {
+  if (!host.eval_module(script)) {
     host.shutdown();
     return 1;
   }

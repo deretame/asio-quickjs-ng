@@ -15,6 +15,7 @@ set(JS_FILES
   "${CMAKE_CURRENT_LIST_DIR}/../src/js/response.js"
   "${CMAKE_CURRENT_LIST_DIR}/../src/js/fetch.js"
   "${CMAKE_CURRENT_LIST_DIR}/../src/js/crypto.js"
+  "${CMAKE_CURRENT_LIST_DIR}/../src/js/http.js"
 )
 
 # Explicit filename -> C++ variable name mapping so that fetch.cpp and the
@@ -29,6 +30,7 @@ set(JS_VAR_NAME_request.js "kJsRequestBytes")
 set(JS_VAR_NAME_response.js "kJsResponseBytes")
 set(JS_VAR_NAME_fetch.js "kJsFetchBytes")
 set(JS_VAR_NAME_crypto.js "kJsCryptoBytes")
+set(JS_VAR_NAME_http.js "kJsHttpBytes")
 
 set(OUTPUT_HEADER "${OUTPUT_DIR}/js_embedded.hpp")
 file(MAKE_DIRECTORY "${OUTPUT_DIR}")
