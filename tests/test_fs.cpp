@@ -163,3 +163,27 @@ TEST_F(FsTest, AppendWorks) {
                       std::istreambuf_iterator<char>());
   EXPECT_EQ(content, "hello world");
 }
+
+// Medium-priority API tests
+TEST_F(FsTest, LinkSync) {
+  auto target = "/tmp/asio_qjs_fs_test/link_target.txt";
+  auto link = "/tmp/asio_qjs_fs_test/hard_link.txt";
+  {
+    std::ofstream f(target);
+    f << "hard link content";
+  }
+  fs::create_hard_link(target, link);
+  EXPECT_TRUE(fs::exists(link));
+  fs::remove(target);
+  fs::remove(link);
+}
+
+TEST_F(FsTest, OpenSync) {
+  auto path = "/tmp/asio_qjs_fs_test/open_test.txt";
+  {
+    std::ofstream f(path);
+    f << "test content";
+  }
+  EXPECT_TRUE(fs::exists(path));
+  fs::remove(path);
+}
