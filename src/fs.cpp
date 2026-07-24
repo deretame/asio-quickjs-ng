@@ -1713,6 +1713,7 @@ static JSValue native_promises_mkdtemp(JSContext*, JSValueConst, int, JSValueCon
 static JSValue native_opendir_sync(JSContext*, JSValueConst, int, JSValueConst*);
 static JSValue native_watch_file(JSContext*, JSValueConst, int, JSValueConst*);
 static JSValue native_unwatch_file(JSContext*, JSValueConst, int, JSValueConst*);
+static void install_callback_wrappers(Host& host);
 static JSValue native_fdatasync_sync(JSContext*, JSValueConst, int, JSValueConst*);
 static JSValue native_fchown_sync(JSContext*, JSValueConst, int, JSValueConst*);
 static JSValue native_fchmod_sync(JSContext*, JSValueConst, int, JSValueConst*);
@@ -1839,6 +1840,9 @@ void install_extended(Host& host) {
     qjs::Value::take(ctx, JS_NewCFunction(ctx, &native_lchown_sync, "__nativeLchownSync", 3)));
   g.set("__nativeLutimesSync",
     qjs::Value::take(ctx, JS_NewCFunction(ctx, &native_lutimes_sync, "__nativeLutimesSync", 3)));
+
+  // Install callback wrappers (JS-based, wrapping promises)
+  install_callback_wrappers(host);
 }
 
 // ============================================================================
@@ -2361,6 +2365,55 @@ static JSValue native_write_sync_string(
   JS_FreeCString(ctx, str);
 
   return JS_NewInt32(ctx, static_cast<int32_t>(len));
+}
+
+// ============================================================================
+// Callback versions - implemented in JS by wrapping promises
+// ============================================================================
+
+static void install_callback_wrappers(Host& host) {
+  const char* js = R"JS(
+    // Callback wrapper: converts promise-based API to callback style
+    // Usage: promisify(fn)(...args, callback)
+    function promisify(fn) {
+      return function() {
+        var args = Array.prototype.slice.call(arguments);
+        var callback = args.pop();
+        if (typeof callback !== 'function') {
+          args.push(callback);
+          return fn.apply(null, args);
+        }
+        fn.apply(null, args)
+          .then(function(data) { callback(null, data); })
+          .catch(function(err) { callback(err); });
+      };
+    }
+
+    // Create callback versions from promises
+    globalThis.__fsCallbacks = {
+      readFile: promisify(globalThis.__nativePromisesReadFile),
+      writeFile: promisify(globalThis.__nativePromisesWriteFile),
+      appendFile: promisify(globalThis.__nativePromisesAppendFile),
+      mkdir: promisify(globalThis.__nativePromisesMkdir),
+      rm: promisify(globalThis.__nativePromisesRm),
+      readdir: promisify(globalThis.__nativePromisesReaddir),
+      stat: promisify(globalThis.__nativePromisesStat),
+      lstat: promisify(globalThis.__nativePromisesLstat),
+      access: promisify(globalThis.__nativePromisesAccess),
+      rename: promisify(globalThis.__nativePromisesRename),
+      unlink: promisify(globalThis.__nativePromisesUnlink),
+      copyFile: promisify(globalThis.__nativePromisesCopyFile),
+      chmod: promisify(globalThis.__nativePromisesChmod),
+      chown: promisify(globalThis.__nativePromisesChown),
+      symlink: promisify(globalThis.__nativePromisesSymlink),
+      readlink: promisify(globalThis.__nativePromisesReadlink),
+      realpath: promisify(globalThis.__nativePromisesRealpath),
+      utimes: promisify(globalThis.__nativePromisesUtimes),
+      mkdtemp: promisify(globalThis.__nativePromisesMkdtemp)
+    };
+  )JS";
+
+  host.eval_source(js, "<fs-callback-wrappers>", true);
 }
 
 }  // namespace fs_api
