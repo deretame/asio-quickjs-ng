@@ -251,6 +251,12 @@ class Value {
   template <auto Fn>
   void fn(const char* name);
 
+  // g.fn_raw(&native_fn, "name", argc) — for raw JSCFunction* signatures.
+  void fn_raw(JSCFunction* fn, const char* name, int length)
+  {
+    set(name, take(ctx_, JS_NewCFunction(ctx_, fn, name, length)));
+  }
+
   // g.obj("console", [](Value &o) { o.fn<&print_fn>("log"); });
   template <typename F>
   void obj(const char* name, F&& setup)

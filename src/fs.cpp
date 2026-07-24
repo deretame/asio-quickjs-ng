@@ -834,44 +834,26 @@ static JSValue native_mkdtemp_sync(
 // ---------------------------------------------------------------------------
 
 void install(Host& host) {
-  auto* ctx = host.js_raw();
   auto g = host.global();
 
-  // Register native functions as globals
-  g.set("__nativeReadFileSync",
-    qjs::Value::take(ctx, JS_NewCFunction(ctx, &native_read_file_sync, "__nativeReadFileSync", 2)));
-  g.set("__nativeWriteFileSync",
-    qjs::Value::take(ctx, JS_NewCFunction(ctx, &native_write_file_sync, "__nativeWriteFileSync", 2)));
-  g.set("__nativeReadFile",
-    qjs::Value::take(ctx, JS_NewCFunction(ctx, &native_read_file, "__nativeReadFile", 3)));
-  g.set("__nativeWriteFile",
-    qjs::Value::take(ctx, JS_NewCFunction(ctx, &native_write_file, "__nativeWriteFile", 3)));
-  g.set("__nativeExistsSync",
-    qjs::Value::take(ctx, JS_NewCFunction(ctx, &native_exists_sync, "__nativeExistsSync", 1)));
-  g.set("__nativeUnlinkSync",
-    qjs::Value::take(ctx, JS_NewCFunction(ctx, &native_unlink_sync, "__nativeUnlinkSync", 1)));
-  g.set("__nativeMkdirSync",
-    qjs::Value::take(ctx, JS_NewCFunction(ctx, &native_mkdir_sync, "__native_mkdir_sync", 2)));
-  g.set("__nativeReaddirSync",
-    qjs::Value::take(ctx, JS_NewCFunction(ctx, &native_readdir_sync, "__nativeReaddirSync", 1)));
-  g.set("__nativeAppendFileSync",
-    qjs::Value::take(ctx, JS_NewCFunction(ctx, &native_append_file_sync, "__nativeAppendFileSync", 2)));
-  g.set("__nativeCopyFileSync",
-    qjs::Value::take(ctx, JS_NewCFunction(ctx, &native_copy_file_sync, "__nativeCopyFileSync", 2)));
-  g.set("__nativeRenameSync",
-    qjs::Value::take(ctx, JS_NewCFunction(ctx, &native_rename_sync, "__nativeRenameSync", 2)));
-  g.set("__nativeStatSync",
-    qjs::Value::take(ctx, JS_NewCFunction(ctx, &native_stat_sync, "__nativeStatSync", 1)));
-  g.set("__nativeRmSync",
-    qjs::Value::take(ctx, JS_NewCFunction(ctx, &native_rm_sync, "__native_rm_sync", 2)));
-  g.set("__nativeRmdirSync",
-    qjs::Value::take(ctx, JS_NewCFunction(ctx, &native_rmdir_sync, "__nativeRmdirSync", 1)));
-  g.set("__nativeChmodSync",
-    qjs::Value::take(ctx, JS_NewCFunction(ctx, &native_chmod_sync, "__nativeChmodSync", 2)));
-  g.set("__nativeRealpathSync",
-    qjs::Value::take(ctx, JS_NewCFunction(ctx, &native_realpath_sync, "__nativeRealpathSync", 1)));
-  g.set("__nativeMkdtempSync",
-    qjs::Value::take(ctx, JS_NewCFunction(ctx, &native_mkdtemp_sync, "__nativeMkdtempSync", 1)));
+  // All registrations use fn_raw helper: g.fn_raw(&fn, "name", argc)
+  g.fn_raw(&native_read_file_sync, "__nativeReadFileSync", 2);
+  g.fn_raw(&native_write_file_sync, "__nativeWriteFileSync", 2);
+  g.fn_raw(&native_read_file, "__nativeReadFile", 3);
+  g.fn_raw(&native_write_file, "__nativeWriteFile", 3);
+  g.fn_raw(&native_exists_sync, "__nativeExistsSync", 1);
+  g.fn_raw(&native_unlink_sync, "__nativeUnlinkSync", 1);
+  g.fn_raw(&native_mkdir_sync, "__nativeMkdirSync", 2);
+  g.fn_raw(&native_readdir_sync, "__nativeReaddirSync", 1);
+  g.fn_raw(&native_append_file_sync, "__nativeAppendFileSync", 2);
+  g.fn_raw(&native_copy_file_sync, "__nativeCopyFileSync", 2);
+  g.fn_raw(&native_rename_sync, "__nativeRenameSync", 2);
+  g.fn_raw(&native_stat_sync, "__nativeStatSync", 1);
+  g.fn_raw(&native_rm_sync, "__native_rm_sync", 2);
+  g.fn_raw(&native_rmdir_sync, "__nativeRmdirSync", 1);
+  g.fn_raw(&native_chmod_sync, "__nativeChmodSync", 2);
+  g.fn_raw(&native_realpath_sync, "__nativeRealpathSync", 1);
+  g.fn_raw(&native_mkdtemp_sync, "__nativeMkdtempSync", 1);
 
   spdlog::debug("fs module installed (file thread pool: 4 threads)");
 }
@@ -1730,125 +1712,73 @@ static JSValue native_lutimes_sync(JSContext*, JSValueConst, int, JSValueConst*)
 // ---------------------------------------------------------------------------
 
 void install_extended(Host& host) {
-  auto* ctx = host.js_raw();
   auto g = host.global();
 
-  g.set("__nativeLstatSync",
-    qjs::Value::take(ctx, JS_NewCFunction(ctx, &native_lstat_sync, "__nativeLstatSync", 1)));
-  g.set("__nativeSymlinkSync",
-    qjs::Value::take(ctx, JS_NewCFunction(ctx, &native_symlink_sync, "__nativeSymlinkSync", 2)));
-  g.set("__nativeReadlinkSync",
-    qjs::Value::take(ctx, JS_NewCFunction(ctx, &native_readlink_sync, "__nativeReadlinkSync", 1)));
-  g.set("__nativeAccessSync",
-    qjs::Value::take(ctx, JS_NewCFunction(ctx, &native_access_sync, "__nativeAccessSync", 2)));
-  g.set("__nativeTruncateSync",
-    qjs::Value::take(ctx, JS_NewCFunction(ctx, &native_truncate_sync, "__nativeTruncateSync", 2)));
-  g.set("__nativeUtimesSync",
-    qjs::Value::take(ctx, JS_NewCFunction(ctx, &native_utimes_sync, "__nativeUtimesSync", 3)));
-  g.set("__nativeCreateReadStream",
-    qjs::Value::take(ctx, JS_NewCFunction(ctx, &native_create_read_stream, "__nativeCreateReadStream", 2)));
-  g.set("__nativeCreateWriteStream",
-    qjs::Value::take(ctx, JS_NewCFunction(ctx, &native_create_write_stream, "__nativeCreateWriteStream", 2)));
-  g.set("__nativeWatch",
-    qjs::Value::take(ctx, JS_NewCFunction(ctx, &native_watch, "__nativeWatch", 2)));
+  // All registrations use fn_raw helper: g.fn_raw(&fn, "name", argc)
+  g.fn_raw(&native_lstat_sync, "__nativeLstatSync", 1);
+  g.fn_raw(&native_symlink_sync, "__nativeSymlinkSync", 2);
+  g.fn_raw(&native_readlink_sync, "__nativeReadlinkSync", 1);
+  g.fn_raw(&native_access_sync, "__nativeAccessSync", 2);
+  g.fn_raw(&native_truncate_sync, "__nativeTruncateSync", 2);
+  g.fn_raw(&native_utimes_sync, "__nativeUtimesSync", 3);
+  g.fn_raw(&native_create_read_stream, "__nativeCreateReadStream", 2);
+  g.fn_raw(&native_create_write_stream, "__nativeCreateWriteStream", 2);
+  g.fn_raw(&native_watch, "__nativeWatch", 2);
 
   // File descriptor APIs
-  g.set("__nativeOpenSync",
-    qjs::Value::take(ctx, JS_NewCFunction(ctx, &native_open_sync, "__nativeOpenSync", 2)));
-  g.set("__nativeCloseSync",
-    qjs::Value::take(ctx, JS_NewCFunction(ctx, &native_close_sync, "__nativeCloseSync", 1)));
-  g.set("__nativeReadSync",
-    qjs::Value::take(ctx, JS_NewCFunction(ctx, &native_read_sync, "__nativeReadSync", 5)));
-  g.set("__nativeWriteSync",
-    qjs::Value::take(ctx, JS_NewCFunction(ctx, &native_write_sync, "__nativeWriteSync", 4)));
-  g.set("__nativeFsyncSync",
-    qjs::Value::take(ctx, JS_NewCFunction(ctx, &native_fsync_sync, "__nativeFsyncSync", 1)));
-  g.set("__nativeLinkSync",
-    qjs::Value::take(ctx, JS_NewCFunction(ctx, &native_link_sync, "__nativeLinkSync", 2)));
+  g.fn_raw(&native_open_sync, "__nativeOpenSync", 2);
+  g.fn_raw(&native_close_sync, "__nativeCloseSync", 1);
+  g.fn_raw(&native_read_sync, "__nativeReadSync", 5);
+  g.fn_raw(&native_write_sync, "__nativeWriteSync", 4);
+  g.fn_raw(&native_fsync_sync, "__nativeFsyncSync", 1);
+  g.fn_raw(&native_link_sync, "__nativeLinkSync", 2);
 
   // Additional medium-priority APIs
-  g.set("__nativeGlobSync",
-    qjs::Value::take(ctx, JS_NewCFunction(ctx, &native_glob_sync, "__nativeGlobSync", 1)));
-  g.set("__nativeCpSync",
-    qjs::Value::take(ctx, JS_NewCFunction(ctx, &native_cp_sync, "__nativeCpSync", 3)));
-  g.set("__nativeChownSync",
-    qjs::Value::take(ctx, JS_NewCFunction(ctx, &native_chown_sync, "__nativeChownSync", 3)));
-  g.set("__nativeStatfsSync",
-    qjs::Value::take(ctx, JS_NewCFunction(ctx, &native_statfs_sync, "__nativeStatfsSync", 1)));
-  g.set("__nativeMkstempSync",
-    qjs::Value::take(ctx, JS_NewCFunction(ctx, &native_mkstemp_sync, "__nativeMkstempSync", 1)));
+  g.fn_raw(&native_glob_sync, "__nativeGlobSync", 1);
+  g.fn_raw(&native_cp_sync, "__nativeCpSync", 3);
+  g.fn_raw(&native_chown_sync, "__nativeChownSync", 3);
+  g.fn_raw(&native_statfs_sync, "__nativeStatfsSync", 1);
+  g.fn_raw(&native_mkstemp_sync, "__nativeMkstempSync", 1);
 
   // fs.promises API
-  g.set("__nativePromisesReadFile",
-    qjs::Value::take(ctx, JS_NewCFunction(ctx, &native_promises_read_file, "__nativePromisesReadFile", 2)));
-  g.set("__nativePromisesWriteFile",
-    qjs::Value::take(ctx, JS_NewCFunction(ctx, &native_promises_write_file, "__nativePromisesWriteFile", 3)));
-  g.set("__nativePromisesMkdir",
-    qjs::Value::take(ctx, JS_NewCFunction(ctx, &native_promises_mkdir, "__nativePromisesMkdir", 2)));
-  g.set("__nativePromisesRm",
-    qjs::Value::take(ctx, JS_NewCFunction(ctx, &native_promises_rm, "__nativePromisesRm", 2)));
-  g.set("__nativePromisesReaddir",
-    qjs::Value::take(ctx, JS_NewCFunction(ctx, &native_promises_readdir, "__nativePromisesReaddir", 2)));
-  g.set("__nativePromisesStat",
-    qjs::Value::take(ctx, JS_NewCFunction(ctx, &native_promises_stat, "__nativePromisesStat", 1)));
-  g.set("__nativePromisesLstat",
-    qjs::Value::take(ctx, JS_NewCFunction(ctx, &native_promises_lstat, "__nativePromisesLstat", 1)));
-  g.set("__nativePromisesAccess",
-    qjs::Value::take(ctx, JS_NewCFunction(ctx, &native_promises_access, "__nativePromisesAccess", 2)));
-  g.set("__nativePromisesRename",
-    qjs::Value::take(ctx, JS_NewCFunction(ctx, &native_promises_rename, "__nativePromisesRename", 2)));
-  g.set("__nativePromisesUnlink",
-    qjs::Value::take(ctx, JS_NewCFunction(ctx, &native_promises_unlink, "__nativePromisesUnlink", 1)));
-  g.set("__nativePromisesCopyFile",
-    qjs::Value::take(ctx, JS_NewCFunction(ctx, &native_promises_copy_file, "__nativePromisesCopyFile", 2)));
-  g.set("__nativePromisesChmod",
-    qjs::Value::take(ctx, JS_NewCFunction(ctx, &native_promises_chmod, "__nativePromisesChmod", 2)));
-  g.set("__nativePromisesAppendFile",
-    qjs::Value::take(ctx, JS_NewCFunction(ctx, &native_promises_append_file, "__nativePromisesAppendFile", 2)));
-  g.set("__nativePromisesSymlink",
-    qjs::Value::take(ctx, JS_NewCFunction(ctx, &native_promises_symlink, "__nativePromisesSymlink", 2)));
-  g.set("__nativePromisesReadlink",
-    qjs::Value::take(ctx, JS_NewCFunction(ctx, &native_promises_readlink, "__nativePromisesReadlink", 1)));
-  g.set("__nativePromisesRealpath",
-    qjs::Value::take(ctx, JS_NewCFunction(ctx, &native_promises_realpath, "__nativePromisesRealpath", 1)));
-  g.set("__nativePromisesChown",
-    qjs::Value::take(ctx, JS_NewCFunction(ctx, &native_promises_chown, "__nativePromisesChown", 3)));
-  g.set("__nativePromisesUtimes",
-    qjs::Value::take(ctx, JS_NewCFunction(ctx, &native_promises_utimes, "__nativePromisesUtimes", 3)));
-  g.set("__nativePromisesMkdtemp",
-    qjs::Value::take(ctx, JS_NewCFunction(ctx, &native_promises_mkdtemp, "__nativePromisesMkdtemp", 1)));
+  g.fn_raw(&native_promises_read_file, "__nativePromisesReadFile", 2);
+  g.fn_raw(&native_promises_write_file, "__nativePromisesWriteFile", 3);
+  g.fn_raw(&native_promises_mkdir, "__nativePromisesMkdir", 2);
+  g.fn_raw(&native_promises_rm, "__nativePromisesRm", 2);
+  g.fn_raw(&native_promises_readdir, "__nativePromisesReaddir", 2);
+  g.fn_raw(&native_promises_stat, "__nativePromisesStat", 1);
+  g.fn_raw(&native_promises_lstat, "__nativePromisesLstat", 1);
+  g.fn_raw(&native_promises_access, "__nativePromisesAccess", 2);
+  g.fn_raw(&native_promises_rename, "__nativePromisesRename", 2);
+  g.fn_raw(&native_promises_unlink, "__nativePromisesUnlink", 1);
+  g.fn_raw(&native_promises_copy_file, "__nativePromisesCopyFile", 2);
+  g.fn_raw(&native_promises_chmod, "__nativePromisesChmod", 2);
+  g.fn_raw(&native_promises_append_file, "__nativePromisesAppendFile", 2);
+  g.fn_raw(&native_promises_symlink, "__nativePromisesSymlink", 2);
+  g.fn_raw(&native_promises_readlink, "__nativePromisesReadlink", 1);
+  g.fn_raw(&native_promises_realpath, "__nativePromisesRealpath", 1);
+  g.fn_raw(&native_promises_chown, "__nativePromisesChown", 3);
+  g.fn_raw(&native_promises_utimes, "__nativePromisesUtimes", 3);
+  g.fn_raw(&native_promises_mkdtemp, "__nativePromisesMkdtemp", 1);
 
   // opendirSync
-  g.set("__nativeOpendirSync",
-    qjs::Value::take(ctx, JS_NewCFunction(ctx, &native_opendir_sync, "__nativeOpendirSync", 1)));
+  g.fn_raw(&native_opendir_sync, "__nativeOpendirSync", 1);
 
   // watchFile / unwatchFile
-  g.set("__nativeWatchFile",
-    qjs::Value::take(ctx, JS_NewCFunction(ctx, &native_watch_file, "__nativeWatchFile", 3)));
-  g.set("__nativeUnwatchFile",
-    qjs::Value::take(ctx, JS_NewCFunction(ctx, &native_unwatch_file, "__nativeUnwatchFile", 2)));
+  g.fn_raw(&native_watch_file, "__nativeWatchFile", 3);
+  g.fn_raw(&native_unwatch_file, "__nativeUnwatchFile", 2);
 
   // Remaining medium-priority APIs
-  g.set("__nativeFdatasyncSync",
-    qjs::Value::take(ctx, JS_NewCFunction(ctx, &native_fdatasync_sync, "__nativeFdatasyncSync", 1)));
-  g.set("__nativeFchownSync",
-    qjs::Value::take(ctx, JS_NewCFunction(ctx, &native_fchown_sync, "__nativeFchownSync", 3)));
-  g.set("__nativeFchmodSync",
-    qjs::Value::take(ctx, JS_NewCFunction(ctx, &native_fchmod_sync, "__nativeFchmodSync", 2)));
-  g.set("__nativeFstatSync",
-    qjs::Value::take(ctx, JS_NewCFunction(ctx, &native_fstat_sync, "__nativeFstatSync", 1)));
-  g.set("__nativeLchmodSync",
-    qjs::Value::take(ctx, JS_NewCFunction(ctx, &native_lchmod_sync, "__nativeLchmodSync", 2)));
-  g.set("__nativeLchownSync",
-    qjs::Value::take(ctx, JS_NewCFunction(ctx, &native_lchown_sync, "__nativeLchownSync", 3)));
-  g.set("__nativeLutimesSync",
-    qjs::Value::take(ctx, JS_NewCFunction(ctx, &native_lutimes_sync, "__nativeLutimesSync", 3)));
-  g.set("__nativeFutimesSync",
-    qjs::Value::take(ctx, JS_NewCFunction(ctx, &native_futimes_sync, "__nativeFutimesSync", 3)));
-  g.set("__nativeOpendir",
-    qjs::Value::take(ctx, JS_NewCFunction(ctx, &native_opendir, "__nativeOpendir", 2)));
-  g.set("__nativePromisesOpendir",
-    qjs::Value::take(ctx, JS_NewCFunction(ctx, &native_promises_opendir, "__nativePromisesOpendir", 1)));
+  g.fn_raw(&native_fdatasync_sync, "__nativeFdatasyncSync", 1);
+  g.fn_raw(&native_fchown_sync, "__nativeFchownSync", 3);
+  g.fn_raw(&native_fchmod_sync, "__nativeFchmodSync", 2);
+  g.fn_raw(&native_fstat_sync, "__nativeFstatSync", 1);
+  g.fn_raw(&native_lchmod_sync, "__nativeLchmodSync", 2);
+  g.fn_raw(&native_lchown_sync, "__nativeLchownSync", 3);
+  g.fn_raw(&native_lutimes_sync, "__nativeLutimesSync", 3);
+  g.fn_raw(&native_futimes_sync, "__nativeFutimesSync", 3);
+  g.fn_raw(&native_opendir, "__nativeOpendir", 2);
+  g.fn_raw(&native_promises_opendir, "__nativePromisesOpendir", 1);
 
   // Install callback wrappers (JS-based, wrapping promises)
   install_callback_wrappers(host);
