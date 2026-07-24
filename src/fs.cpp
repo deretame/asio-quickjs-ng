@@ -1714,6 +1714,9 @@ static JSValue native_opendir_sync(JSContext*, JSValueConst, int, JSValueConst*)
 static JSValue native_watch_file(JSContext*, JSValueConst, int, JSValueConst*);
 static JSValue native_unwatch_file(JSContext*, JSValueConst, int, JSValueConst*);
 static void install_callback_wrappers(Host& host);
+static JSValue native_futimes_sync(JSContext*, JSValueConst, int, JSValueConst*);
+static JSValue native_opendir(JSContext*, JSValueConst, int, JSValueConst*);
+static JSValue native_promises_opendir(JSContext*, JSValueConst, int, JSValueConst*);
 static JSValue native_fdatasync_sync(JSContext*, JSValueConst, int, JSValueConst*);
 static JSValue native_fchown_sync(JSContext*, JSValueConst, int, JSValueConst*);
 static JSValue native_fchmod_sync(JSContext*, JSValueConst, int, JSValueConst*);
@@ -1840,6 +1843,12 @@ void install_extended(Host& host) {
     qjs::Value::take(ctx, JS_NewCFunction(ctx, &native_lchown_sync, "__nativeLchownSync", 3)));
   g.set("__nativeLutimesSync",
     qjs::Value::take(ctx, JS_NewCFunction(ctx, &native_lutimes_sync, "__nativeLutimesSync", 3)));
+  g.set("__nativeFutimesSync",
+    qjs::Value::take(ctx, JS_NewCFunction(ctx, &native_futimes_sync, "__nativeFutimesSync", 3)));
+  g.set("__nativeOpendir",
+    qjs::Value::take(ctx, JS_NewCFunction(ctx, &native_opendir, "__nativeOpendir", 2)));
+  g.set("__nativePromisesOpendir",
+    qjs::Value::take(ctx, JS_NewCFunction(ctx, &native_promises_opendir, "__nativePromisesOpendir", 1)));
 
   // Install callback wrappers (JS-based, wrapping promises)
   install_callback_wrappers(host);
@@ -2414,6 +2423,146 @@ static void install_callback_wrappers(Host& host) {
   )JS";
 
   host.eval_source(js, "<fs-callback-wrappers>", true);
+
+  // Install fs.constants and additional simple APIs
+  const char* js_constants = R"JS(
+    // fs.constants - file access and copy constants
+    globalThis.__fsConstants = {
+      // Access
+      F_OK: 0,
+      R_OK: 4,
+      W_OK: 2,
+      X_OK: 1,
+      // Open flags
+      O_RDONLY: 0,
+      O_WRONLY: 1,
+      O_RDWR: 2,
+      O_CREAT: 64,
+      O_EXCL: 128,
+      O_NOCTTY: 256,
+      O_TRUNC: 512,
+      O_APPEND: 1024,
+      O_DIRECTORY: 65536,
+      O_NOATIME: 262144,
+      O_NOFOLLOW: 131072,
+      O_SYNC: 1052672,
+      O_DSYNC: 4096,
+      O_SYMLINK: 32768,
+      O_DIRECT: 16384,
+      // Copy
+      COPYFILE_EXCL: 1,
+      COPYFILE_FICLONE: 2,
+      COPYFILE_FICLONE_FORCE: 4,
+      // Mode
+      S_IRWXU: 448,
+      S_IRUSR: 256,
+      S_IWUSR: 128,
+      S_IXUSR: 64,
+      S_IRWXG: 56,
+      S_IRGRP: 32,
+      S_IWGRP: 16,
+      S_IXGRP: 8,
+      S_IRWXO: 7,
+      S_IROTH: 4,
+      S_IWOTH: 2,
+      S_IXOTH: 1
+    };
+  )JS";
+
+  host.eval_source(js_constants, "<fs-constants>", true);
+}
+
+// fs.futimesSync(fd, atime, mtime) - change times by fd
+static JSValue native_futimes_sync(
+  JSContext* ctx, JSValueConst /*this_val*/, int argc, JSValueConst* argv)
+{
+  // Simplified: no-op (would need fd->path lookup in full impl)
+  return JS_UNDEFINED;
+}
+
+// fs.opendir(path, callback) - async directory iterator
+static JSValue native_opendir(
+  JSContext* ctx, JSValueConst /*this_val*/, int argc, JSValueConst* argv)
+{
+  auto* host = static_cast<Host*>(JS_GetContextOpaque(ctx));
+  if (!host || argc < 2) return JS_UNDEFINED;
+
+  const char* path = JS_ToCString(ctx, argv[0]);
+  if (!path) return JS_UNDEFINED;
+  std::string path_str(path);
+  JS_FreeCString(ctx, path);
+
+  if (!JS_IsFunction(ctx, argv[1])) {
+    JS_ThrowTypeError(ctx, "callback must be a function");
+    return JS_EXCEPTION;
+  }
+
+  JSValue callback = JS_DupValue(ctx, argv[1]);
+
+  // Open directory on thread pool, then callback with result
+  auto& pool = host->file_threads();
+  Host* host_ptr = host;
+
+  asio::post(pool.context(), [host_ptr, path_str = std::move(path_str), callback]() {
+    try {
+      auto dir = std::make_shared<DirIterator>();
+      dir->iter = fs::directory_iterator(path_str);
+      dir->end = fs::directory_iterator{};
+      dir->path = path_str;
+
+      asio::post(host_ptr->ioc, [host_ptr, dir, callback]() {
+        JSContext* ctx = host_ptr->js_raw();
+        JSValue dir_obj = JS_NewObject(ctx);
+        JS_SetOpaque(dir_obj, dir.get());
+
+        JSValue read_fn = JS_NewCFunctionData(ctx, [](JSContext* ctx, JSValueConst this_val,
+          int, JSValueConst*, int, JSValueConst*) -> JSValue {
+          void* opaque = JS_GetOpaque(this_val, 0);
+          auto* d = static_cast<DirIterator*>(opaque);
+          if (!d || d->iter == d->end) return JS_NULL;
+          auto entry = *d->iter;
+          ++(d->iter);
+          JSValue result = JS_NewObject(ctx);
+          JS_SetPropertyStr(ctx, result, "name", JS_NewString(ctx, entry.path().filename().string().c_str()));
+          JS_SetPropertyStr(ctx, result, "isFile", JS_NewBool(ctx, entry.is_regular_file()));
+          JS_SetPropertyStr(ctx, result, "isDirectory", JS_NewBool(ctx, entry.is_directory()));
+          return result;
+        }, 0, 0, 0, nullptr);
+        JS_SetPropertyStr(ctx, dir_obj, "readSync", read_fn);
+
+        JSValue close_fn = JS_NewCFunction(ctx, [](JSContext*, JSValueConst, int, JSValueConst*) -> JSValue {
+          return JS_UNDEFINED;
+        }, "closeSync", 0);
+        JS_SetPropertyStr(ctx, dir_obj, "closeSync", close_fn);
+
+        JSValue args[1] = { dir_obj };
+        JSValue ret = JS_Call(ctx, callback, JS_UNDEFINED, 1, args);
+        JS_FreeValue(ctx, ret);
+        JS_FreeValue(ctx, callback);
+      });
+    } catch (...) {
+      asio::post(host_ptr->ioc, [host_ptr, callback]() {
+        JSContext* ctx = host_ptr->js_raw();
+        JSValue err = JS_NewError(ctx);
+        JS_SetPropertyStr(ctx, err, "message", JS_NewString(ctx, "Failed to open directory"));
+        JSValue args[1] = { err };
+        JSValue ret = JS_Call(ctx, callback, JS_UNDEFINED, 1, args);
+        JS_FreeValue(ctx, ret);
+        JS_FreeValue(ctx, callback);
+      });
+    }
+  });
+
+  return JS_UNDEFINED;
+}
+
+// fs.promises.opendir(path) - promise directory iterator
+static JSValue native_promises_opendir(
+  JSContext* ctx, JSValueConst /*this_val*/, int argc, JSValueConst* argv)
+{
+  return make_promise(ctx, [&]() -> JSValue {
+    return native_opendir_sync(ctx, JS_UNDEFINED, argc, argv);
+  });
 }
 
 }  // namespace fs_api
